@@ -1,0 +1,58 @@
+# Every action is pinned to a full commit SHA with its version in a comment.
+# Rebuilds the package repository from every OpenVIBES release, checks and
+# signs it, and deploys it with the installer (openvibes-platform
+# docs/specs/2026-09-27-releases-design.md §3).
+name: Publish
+
+on:
+  repository_dispatch:
+    types: [release-published]
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build the site
+    runs-on: ubuntu-latest
+    container: registry.fedoraproject.org/fedora:44
+    steps:
+      - name: Install tools
+        run: dnf -q -y install git gh createrepo_c rpm gnupg2
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Collect released packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/collect.sh site/rpm/fedora/44/x86_64
+      - name: Check, index and sign
+        env:
+          RPM_SIGNING_KEY: ${{ secrets.RPM_SIGNING_KEY }}
+          RPM_SIGNING_PASSPHRASE: ${{ secrets.RPM_SIGNING_PASSPHRASE }}
+        run: bash scripts/build-repo.sh site openvibes.gpg
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

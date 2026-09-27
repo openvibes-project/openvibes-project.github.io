@@ -1,0 +1,27 @@
+# Every action is pinned to a full commit SHA with its version in a comment.
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: ShellCheck and publishing test (fedora:44)
+    runs-on: ubuntu-latest
+    container: registry.fedoraproject.org/fedora:44
+    steps:
+      - name: Install tools
+        run: dnf -q -y install git ShellCheck rpm-build rpm-sign gnupg2 createrepo_c
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: ShellCheck
+        run: shellcheck install.sh scripts/*.sh tests/*.sh
+      - name: Publishing refuses unsigned packages and an unset key
+        run: bash tests/test-build-repo.sh

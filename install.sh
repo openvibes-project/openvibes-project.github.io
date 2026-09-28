@@ -122,7 +122,7 @@ if [ "$mode" = platform ]; then
         exec runuser -u "$user" -- env HOME="$home" USER="$user" /usr/bin/openvibes-admin </dev/tty >/dev/tty 2>&1
     fi
     say "installed. Next, as your own user: openvibes-admin (the Setup screen),"
-    say "or as root: openvibes-admin setup --quick --components ingest,console,distribution,vulns,agent --hostname NAME --root-key-out /root/openvibes-root-ca.key"
+    say "or as root: openvibes-admin setup --quick --components ingest,console,distribution,vulns,rules,agent --hostname NAME --root-key-out /root/openvibes-root-ca.key"
     exit 0
 fi
 

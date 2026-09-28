@@ -4,7 +4,8 @@
 #   1. platform: install.sh (no terminal: prints the next steps), setup
 #      --quick with the baseline rules published, openvibes-admin agent
 #      command → the one-line agent command;
-#   2. agent: that command enrolls the agent (install.sh --agent);
+#   2. agent: that command enrolls the agent (install.sh --agent) and,
+#      through its --rules, the agent fetches and accepts the baseline;
 #   3. refusals, each leaving no agent package behind: a wrong package-key
 #      fingerprint, a wrong CA fingerprint, a server whose certificate is
 #      not from the CA it serves, Fedora 43 and Debian, and an agent that
@@ -125,6 +126,11 @@ grep -q "enrolled as agent\." <<<"$out" || { echo "$out"; fail "no 'enrolled as'
 wait_for "the platform lists the agent as active" 30 platform \
     'runuser -u openvibes-admin -- openvibes-admin agent list | grep -q "  active  "'
 ok "agent enrolled through the one-line command"
+grep -q -- " --rules baseline," <<<"$LINE" || fail "agent command has no --rules: $LINE"
+AGENT_ID=$(in_c platform 'runuser -u openvibes-admin -- openvibes-admin agent list' | awk 'NR == 1 {print $1}')
+wait_for "the agent accepted the baseline rule set" 180 platform \
+    "runuser -u openvibes-admin -- openvibes-admin agent show $AGENT_ID | grep -q '^rule set baseline version [0-9]'"
+ok "the enrolled agent fetched and accepted the baseline rule set"
 
 # 3. Refusals: each exits non-zero and installs no agent.
 refused() { # DESC CONTAINER ARGS…
@@ -149,6 +155,8 @@ TOKEN=$(sed -n 's/.*--token \([^ ]*\).*/\1/p' <<<"$ARGS")
 FP=$(sed -n 's/.*--ca-sha256 \([^ ]*\).*/\1/p' <<<"$ARGS")
 refused "a wrong package key" agent2 \
     "OPENVIBES_SITE=http://repo:8000 OPENVIBES_KEY_FINGERPRINT=$(printf '0%.0s' {1..40}) sh /test/install.sh $ARGS"
+refused "a malformed --rules" agent2 \
+    "$ENV sh /test/install.sh --agent --platform platform --token $TOKEN --ca-sha256 $FP --rules 'baseline,x;y,z'"
 refused "a wrong CA fingerprint" agent2 \
     "$ENV sh /test/install.sh --agent --platform platform --token $TOKEN --ca-sha256 $(printf '0%.0s' {1..64})"
 wait_for "the foreign server answers" 60 agent2 'curl -ksf https://platform2:18423/v1/ca -o /dev/null'

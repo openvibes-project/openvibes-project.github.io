@@ -2,15 +2,17 @@
 # The installer end to end, in podman containers with systemd, against a
 # local repository signed with a throwaway key (releases spec §6):
 #   1. platform: install.sh (no terminal: prints the next steps), setup
-#      --quick, openvibes-admin agent command → the one-line agent command;
+#      --quick with the baseline rules published, openvibes-admin agent
+#      command → the one-line agent command;
 #   2. agent: that command enrolls the agent (install.sh --agent);
 #   3. refusals, each leaving no agent package behind: a wrong package-key
 #      fingerprint, a wrong CA fingerprint, a server whose certificate is
 #      not from the CA it serves, Fedora 43 and Debian, and an agent that
 #      is already configured (its agent.toml unchanged).
 # Usage: tests/install-e2e.sh RPM_DIR
-#   RPM_DIR  openvibes-{ingest,distribution,vulns,admin}-*.rpm and one
-#            openvibes-agent-*.rpm (debuginfo and other files are ignored)
+#   RPM_DIR  openvibes-{ingest,distribution,vulns,admin}-*.rpm, one
+#            openvibes-agent-*.rpm and openvibes-rules-baseline-*.noarch.rpm
+#            (debuginfo and other files are ignored)
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 PODMAN=${PODMAN:-podman}
@@ -49,7 +51,8 @@ wait_for() { # DESC SECONDS CONTAINER COMMAND
 # The repository: every RPM signed with a throwaway key, indexed, the
 # metadata signed; install.sh and the public key beside it.
 rm -rf "$W"; mkdir -p "$W/repo/rpm/fedora/44/x86_64"
-for f in "$1"/openvibes-{ingest,distribution,vulns,admin,agent}-[0-9]*.x86_64.rpm; do
+for f in "$1"/openvibes-{ingest,distribution,vulns,admin,agent}-[0-9]*.x86_64.rpm \
+    "$1"/openvibes-rules-baseline-[0-9]*.noarch.rpm; do
     cp "$f" "$W/repo/rpm/fedora/44/x86_64/"
 done
 cp "$ROOT/install.sh" "$ROOT/scripts/sign-rpms.sh" "$W/"
@@ -106,12 +109,14 @@ out=$(in_c platform "$ENV sh /test/install.sh" 2>&1) || { echo "$out"; fail "ins
 grep -q "setup --quick" <<<"$out" || { echo "$out"; fail "no next steps without a terminal"; }
 in_c platform 'command -v gpg >/dev/null' || fail "gnupg2 was not installed"
 in_c platform 'rpm -q --quiet openvibes-admin' || fail "openvibes-admin not installed"
-in_c platform 'openvibes-admin setup --quick --components ingest,distribution,vulns --hostname platform --san 127.0.0.1' \
+in_c platform 'openvibes-admin setup --quick --components ingest,distribution,vulns,rules --hostname platform --san 127.0.0.1' \
     > "$W/setup.out" 2>&1 || { cat "$W/setup.out"; fail "setup --quick"; }
 LINE=$(in_c platform 'runuser -u openvibes-admin -- openvibes-admin agent command --platform platform' | head -1)
 [[ $LINE == "curl -fsSL https://openvibes-project.github.io/install.sh | sudo sh -s -- --agent "* ]] || fail "agent command: $LINE"
 ARGS=${LINE#*sh -s -- }
-ok "platform installed through install.sh and Setup; agent command printed"
+in_c platform 'runuser -u openvibes-admin -- openvibes-admin rules list' | grep -q '^baseline v[0-9]' ||
+    { cat "$W/setup.out"; fail "baseline rules not published by Setup"; }
+ok "platform installed through install.sh and Setup; baseline rules published; agent command printed"
 
 # 2. An agent through the printed command.
 systemd_container agent

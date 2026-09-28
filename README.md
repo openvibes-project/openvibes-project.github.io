@@ -15,8 +15,9 @@ The OpenVIBES package repository and installer, published at
   `710AD8AFB7AFE6E864C0CDC4E134BAF37786DA36` (expires 2029-09-26), also
   written into `install.sh`. Check: `gpg --show-keys openvibes.gpg`.
 
-No package is ever committed here. A release in either code repository
-signs its RPMs, checks them, and dispatches `release-published`;
+No package is ever committed here. A release in openvibes-platform,
+openvibes-agent or openvibes-rules signs its RPMs, checks them, and
+dispatches `release-published`;
 `.github/workflows/publish.yml` then collects every release
 (`scripts/collect.sh`), refuses to publish if any package fails the key
 check, indexes and signs the metadata (`scripts/build-repo.sh`), and deploys

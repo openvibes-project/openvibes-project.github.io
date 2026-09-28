@@ -85,6 +85,10 @@ fi
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
+# gpg checks the package key; minimal images may not have it (Fedora's
+# own repositories provide it).
+command -v gpg >/dev/null 2>&1 || dnf install -y -q gnupg2 >/dev/null || die "could not install gnupg2"
+
 # The repository and its key.
 curl -fsSL "$SITE/openvibes.gpg" -o "$tmp/openvibes.gpg" || die "could not download $SITE/openvibes.gpg"
 got=$(gpg --batch --show-keys --with-colons "$tmp/openvibes.gpg" 2>/dev/null | awk -F: '$1 == "fpr" { print $10; exit }')

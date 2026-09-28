@@ -25,3 +25,26 @@ jobs:
         run: shellcheck install.sh scripts/*.sh tests/*.sh
       - name: Publishing refuses unsigned packages and an unset key
         run: bash tests/test-build-repo.sh
+
+  install:
+    name: Installer end to end (podman, systemd)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: The latest RPMs from main of both code repositories
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          latest() { gh run list -R "openvibes-project/$1" --workflow CI --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId'; }
+          gh run download "$(latest openvibes-platform)" -R openvibes-project/openvibes-platform -n rpms -D rpms/platform
+          gh run download "$(latest openvibes-agent)" -R openvibes-project/openvibes-agent -n agent-rpms -D rpms/agent
+          mkdir rpms/all
+          cp rpms/platform/openvibes-{ingest,distribution,vulns,admin}-[0-9]*.x86_64.rpm rpms/all/
+          cp "$(ls -v rpms/agent/openvibes-agent-[0-9]*.x86_64.rpm | head -1)" rpms/all/
+          ls rpms/all
+      - name: Install the platform, enroll an agent, check the refusals
+        run: bash tests/install-e2e.sh rpms/all

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenVIBES packages</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 46rem; margin: 2rem auto; padding: 0 1rem; }
+  pre { overflow-x: auto; padding: .75rem; border: 1px solid #8884; border-radius: 6px; }
+</style>
+</head>
+<body>
+<h1>OpenVIBES packages</h1>
+<p>Signed Fedora 44 packages and the installer for
+<a href="https://github.com/openvibes-project">OpenVIBES</a>.</p>
+<h2>Install the platform</h2>
+<pre>curl -fsSL https://openvibes-project.github.io/install.sh | sudo sh</pre>
+<p>It adds this repository, installs the administration tool and opens its Setup.
+Safer: download <a href="install.sh">install.sh</a>, read it, then run <code>sudo sh install.sh</code>.</p>
+<h2>Add an agent</h2>
+<p>Run the command the platform's Setup shows (or <code>openvibes-admin agent command</code>) on the host.</p>
+<h2>The package key</h2>
+<p><a href="openvibes.gpg">openvibes.gpg</a>, fingerprint
+<code>710A D8AF B7AF E6E8 64C0 CDC4 E134 BAF3 7786 DA36</code>.
+Check it with <code>gpg --show-keys openvibes.gpg</code>.</p>
+</body>
+</html>

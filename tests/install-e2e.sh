@@ -83,14 +83,22 @@ RUN dnf -q -y install systemd postgresql-server procps-ng util-linux curl polkit
 RUN mkdir -p /etc/systemd/network && printf "[Match]\\nOriginalName=*\\n[Link]\\nMACAddressPolicy=none\\n" > /etc/systemd/network/99-default.link
 ' | "$PODMAN" build -q -t "$IMAGE" -f - "$W" >/dev/null
 "$PODMAN" network create "$NET" >/dev/null
+# Names go into each container's /etc/hosts: container DNS on a user
+# network is missing on some hosts (the GitHub runner's podman).
+HOSTS=()
+known() { # NAME: later containers can reach it by name
+    HOSTS+=(--add-host "$1:$("$PODMAN" inspect "$1" --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')")
+}
 "$PODMAN" run -d --name repo --network "$NET" -v "$W/repo:/srv:z" -w /srv \
     registry.fedoraproject.org/fedora:44 bash -c 'dnf -q -y install python3 >/dev/null 2>&1; exec python3 -m http.server 8000' >/dev/null
+known repo
 systemd_container() { # NAME
-    "$PODMAN" run -d --name "$1" --hostname "$1" --network "$NET" --systemd=always --privileged \
+    "$PODMAN" run -d --name "$1" --hostname "$1" --network "$NET" "${HOSTS[@]}" --systemd=always --privileged \
         -v "$W:/test:z" "$IMAGE" /sbin/init >/dev/null
     wait_for "$1 is up" 60 "$1" 'systemctl is-system-running | grep -qE "running|degraded"'
 }
 systemd_container platform
+known platform
 wait_for "the repository answers" 60 platform 'curl -fsS http://repo:8000/openvibes.gpg -o /dev/null'
 
 # 1. The platform through the installer and Setup.
@@ -120,6 +128,17 @@ refused() { # DESC CONTAINER ARGS…
     if in_c "$c" 'rpm -q --quiet openvibes-agent' 2>/dev/null; then fail "$desc: agent installed"; fi
     ok "$desc: refused"
 }
+# A server that serves the platform's real root but holds a certificate
+# from another CA: the fingerprint matches, the server check must not.
+in_c platform 'cat /etc/openvibes/pki/root.crt' > "$W/root1.pem"
+"$PODMAN" run -d --name platform2 --hostname platform2 --network "$NET" "${HOSTS[@]}" -v "$W:/test:z" \
+    registry.fedoraproject.org/fedora:44 bash -c '
+        dnf -q -y install openssl >/dev/null 2>&1
+        mkdir -p /srv/v1 && cp /test/root1.pem /srv/v1/ca && cd /srv
+        openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 1 \
+            -subj /CN=platform2 -addext subjectAltName=DNS:platform2 -keyout /k.pem -out /c.pem 2>/dev/null
+        exec openssl s_server -quiet -accept 18423 -cert /c.pem -key /k.pem -WWW' >/dev/null
+known platform2
 systemd_container agent2
 TOKEN=$(sed -n 's/.*--token \([^ ]*\).*/\1/p' <<<"$ARGS")
 FP=$(sed -n 's/.*--ca-sha256 \([^ ]*\).*/\1/p' <<<"$ARGS")
@@ -127,16 +146,6 @@ refused "a wrong package key" agent2 \
     "OPENVIBES_SITE=http://repo:8000 OPENVIBES_KEY_FINGERPRINT=$(printf '0%.0s' {1..40}) sh /test/install.sh $ARGS"
 refused "a wrong CA fingerprint" agent2 \
     "$ENV sh /test/install.sh --agent --platform platform --token $TOKEN --ca-sha256 $(printf '0%.0s' {1..64})"
-# A server that serves the platform's real root but holds a certificate
-# from another CA: the fingerprint matches, the server check must not.
-in_c platform 'cat /etc/openvibes/pki/root.crt' > "$W/root1.pem"
-"$PODMAN" run -d --name platform2 --hostname platform2 --network "$NET" -v "$W:/test:z" \
-    registry.fedoraproject.org/fedora:44 bash -c '
-        dnf -q -y install openssl >/dev/null 2>&1
-        mkdir -p /srv/v1 && cp /test/root1.pem /srv/v1/ca && cd /srv
-        openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 1 \
-            -subj /CN=platform2 -addext subjectAltName=DNS:platform2 -keyout /k.pem -out /c.pem 2>/dev/null
-        exec openssl s_server -quiet -accept 18423 -cert /c.pem -key /k.pem -WWW' >/dev/null
 wait_for "the foreign server answers" 60 agent2 'curl -ksf https://platform2:18423/v1/ca -o /dev/null'
 refused "a server whose certificate is not from that CA" agent2 \
     "$ENV sh /test/install.sh --agent --platform platform2 --token $TOKEN --ca-sha256 $FP"

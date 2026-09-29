@@ -4,7 +4,8 @@
 #   1. platform: install.sh (no terminal: prints the next steps), setup
 #      --quick with the baseline rules published, openvibes-admin agent
 #      command → the one-line agent command;
-#   2. agent: that command enrolls the agent (install.sh --agent);
+#   2. agent: that command enrolls the agent (install.sh --agent) and,
+#      through its --rules, the agent fetches and accepts the baseline;
 #   3. refusals, each leaving no agent package behind: a wrong package-key
 #      fingerprint, a wrong CA fingerprint, a server whose certificate is
 #      not from the CA it serves, Fedora 43 and Debian, and an agent that
@@ -28,8 +29,8 @@ cleanup() {
     local status=$?
     if ((status != 0)); then
         for c in platform agent; do
-            echo "--- $c: openvibes-ingest, openvibes-agent"
-            "$PODMAN" exec "$c" journalctl -u openvibes-ingest -u openvibes-agent --no-pager -n 20 2>/dev/null || true
+            echo "--- $c: openvibes-ingest, openvibes-distribution, openvibes-agent"
+            "$PODMAN" exec "$c" journalctl -u openvibes-ingest -u openvibes-distribution -u openvibes-agent --no-pager -n 30 2>/dev/null || true
         done
     fi
     # KEEP=1 leaves the containers for inspection after a failure.
@@ -77,12 +78,14 @@ FPR=$(cat "$W/fpr")
 ENV="OPENVIBES_SITE=http://repo:8000 OPENVIBES_KEY_FINGERPRINT=$FPR"
 ok "test repository signed ($FPR)"
 
-# Images: systemd without gnupg2 (the installer adds it), a web server.
+# Image: systemd without gnupg2 (the installer adds it); python3 serves
+# the test repository from the same image, so the server starts without a
+# dnf download (installing it at start was flaky on the runner).
 # udev's default MAC policy would give eth0 a new address when systemd
 # boots in the container, so replies to podman's address never arrive and
 # the other containers cannot reach it: keep podman's MAC.
 printf 'FROM registry.fedoraproject.org/fedora:44
-RUN dnf -q -y install systemd postgresql-server procps-ng util-linux curl polkit sudo && dnf -q -y remove gnupg2 || true; dnf clean all
+RUN dnf -q -y install systemd postgresql-server procps-ng util-linux curl polkit sudo python3 && dnf -q -y remove gnupg2 || true; dnf clean all
 RUN mkdir -p /etc/systemd/network && printf "[Match]\\nOriginalName=*\\n[Link]\\nMACAddressPolicy=none\\n" > /etc/systemd/network/99-default.link
 ' | "$PODMAN" build -q -t "$IMAGE" -f - "$W" >/dev/null
 "$PODMAN" network create "$NET" >/dev/null
@@ -93,7 +96,7 @@ known() { # NAME: later containers can reach it by name
     HOSTS+=(--add-host "$1:$("$PODMAN" inspect "$1" --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')")
 }
 "$PODMAN" run -d --name repo --network "$NET" -v "$W/repo:/srv:z" -w /srv \
-    registry.fedoraproject.org/fedora:44 bash -c 'dnf -q -y install python3 >/dev/null 2>&1; exec python3 -m http.server 8000' >/dev/null
+    "$IMAGE" python3 -m http.server 8000 >/dev/null
 known repo
 systemd_container() { # NAME
     "$PODMAN" run -d --name "$1" --hostname "$1" --network "$NET" "${HOSTS[@]}" --systemd=always --privileged \
@@ -125,6 +128,11 @@ grep -q "enrolled as agent\." <<<"$out" || { echo "$out"; fail "no 'enrolled as'
 wait_for "the platform lists the agent as active" 30 platform \
     'runuser -u openvibes-admin -- openvibes-admin agent list | grep -q "  active  "'
 ok "agent enrolled through the one-line command"
+grep -q -- " --rules baseline," <<<"$LINE" || fail "agent command has no --rules: $LINE"
+AGENT_ID=$(in_c platform 'runuser -u openvibes-admin -- openvibes-admin agent list' | awk 'NR == 1 {print $1}')
+wait_for "the agent accepted the baseline rule set" 180 platform \
+    "runuser -u openvibes-admin -- openvibes-admin agent show $AGENT_ID | grep -q '^rule set baseline version [0-9]'"
+ok "the enrolled agent fetched and accepted the baseline rule set"
 
 # 3. Refusals: each exits non-zero and installs no agent.
 refused() { # DESC CONTAINER ARGS…
@@ -149,6 +157,8 @@ TOKEN=$(sed -n 's/.*--token \([^ ]*\).*/\1/p' <<<"$ARGS")
 FP=$(sed -n 's/.*--ca-sha256 \([^ ]*\).*/\1/p' <<<"$ARGS")
 refused "a wrong package key" agent2 \
     "OPENVIBES_SITE=http://repo:8000 OPENVIBES_KEY_FINGERPRINT=$(printf '0%.0s' {1..40}) sh /test/install.sh $ARGS"
+refused "a malformed --rules" agent2 \
+    "$ENV sh /test/install.sh --agent --platform platform --token $TOKEN --ca-sha256 $FP --rules 'baseline,x;y,z'"
 refused "a wrong CA fingerprint" agent2 \
     "$ENV sh /test/install.sh --agent --platform platform --token $TOKEN --ca-sha256 $(printf '0%.0s' {1..64})"
 wait_for "the foreign server answers" 60 agent2 'curl -ksf https://platform2:18423/v1/ca -o /dev/null'

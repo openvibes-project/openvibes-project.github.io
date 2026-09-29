@@ -30,18 +30,19 @@ say() { printf 'openvibes install: %s\n' "$1"; }
 usage() {
     cat >&2 <<'EOF'
 usage: install.sh                          install the platform's administration tool
-       install.sh --agent --platform HOST[:PORT] --token TOKEN --ca-sha256 FP
+       install.sh --agent --platform HOST[:PORT] --token TOKEN --ca-sha256 FP [--rules SET,ISSUER,KEY]
 EOF
     exit 2
 }
 
-mode=platform platform='' token='' fp=''
+mode=platform platform='' token='' fp='' rules=''
 while [ $# -gt 0 ]; do
     case $1 in
         --agent) mode=agent ;;
         --platform) [ $# -ge 2 ] || usage; platform=$2; shift ;;
         --token) [ $# -ge 2 ] || usage; token=$2; shift ;;
         --ca-sha256) [ $# -ge 2 ] || usage; fp=$2; shift ;;
+        --rules) [ $# -ge 2 ] || usage; rules=$2; shift ;;
         -h|--help) usage ;;
         *) usage ;;
     esac
@@ -59,6 +60,17 @@ os_version=$(. /etc/os-release && printf %s "${VERSION_ID:-}")
 
 if [ "$mode" = agent ]; then
     [ -n "$platform" ] && [ -n "$token" ] && [ -n "$fp" ] || usage
+    # --rules SET,ISSUER,KEY: the rule set the platform publishes and the
+    # key it trusts (from the same fingerprint-checked command line).
+    if [ -n "$rules" ]; then
+        case $rules in *[!A-Za-z0-9.:_,-]*) die "--rules: unexpected characters" ;; esac
+        rule_set=${rules%%,*} rest=${rules#*,}
+        rule_issuer=${rest%%,*} rule_key=${rest#*,}
+        { [ -n "$rule_set" ] && [ -n "$rule_issuer" ] && [ "$rest" != "$rules" ] &&
+            [ "$rule_key" != "$rest" ] && [ "${#rule_key}" = 43 ] &&
+            case $rule_key in *[!A-Za-z0-9_-]*) false ;; *) true ;; esac; } ||
+            die "--rules: want SET,ISSUER,KEY (a 43-character base64url key)"
+    fi
     host=${platform%:*}
     port=18423
     [ "$host" = "$platform" ] || port=${platform##*:}
@@ -155,6 +167,15 @@ platform_url = "$platform_url"
 platform_ca_file = "$AGENT_DIR/platform-ca.crt"
 enrollment_token_file = "$AGENT_DIR/token"
 EOF
+if [ -n "$rules" ]; then
+    cat >> "$tmp/agent.toml" <<EOF
+distribution_url = "https://$host"
+
+[[rule_sets]]
+id = "$rule_set"
+trusted_keys = [{ issuer_key_id = "$rule_issuer", public_key = "$rule_key" }]
+EOF
+fi
 (umask 077 && printf '%s\n' "$token" > "$tmp/token")
 install -m 0644 "$tmp/ca.pem" "$AGENT_DIR/platform-ca.crt"
 install -o openvibes_agent -g openvibes_agent -m 0600 "$tmp/token" "$AGENT_DIR/token"

@@ -77,12 +77,14 @@ FPR=$(cat "$W/fpr")
 ENV="OPENVIBES_SITE=http://repo:8000 OPENVIBES_KEY_FINGERPRINT=$FPR"
 ok "test repository signed ($FPR)"
 
-# Images: systemd without gnupg2 (the installer adds it), a web server.
+# Image: systemd without gnupg2 (the installer adds it); python3 serves
+# the test repository from the same image, so the server starts without a
+# dnf download (installing it at start was flaky on the runner).
 # udev's default MAC policy would give eth0 a new address when systemd
 # boots in the container, so replies to podman's address never arrive and
 # the other containers cannot reach it: keep podman's MAC.
 printf 'FROM registry.fedoraproject.org/fedora:44
-RUN dnf -q -y install systemd postgresql-server procps-ng util-linux curl polkit sudo && dnf -q -y remove gnupg2 || true; dnf clean all
+RUN dnf -q -y install systemd postgresql-server procps-ng util-linux curl polkit sudo python3 && dnf -q -y remove gnupg2 || true; dnf clean all
 RUN mkdir -p /etc/systemd/network && printf "[Match]\\nOriginalName=*\\n[Link]\\nMACAddressPolicy=none\\n" > /etc/systemd/network/99-default.link
 ' | "$PODMAN" build -q -t "$IMAGE" -f - "$W" >/dev/null
 "$PODMAN" network create "$NET" >/dev/null
@@ -93,7 +95,7 @@ known() { # NAME: later containers can reach it by name
     HOSTS+=(--add-host "$1:$("$PODMAN" inspect "$1" --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')")
 }
 "$PODMAN" run -d --name repo --network "$NET" -v "$W/repo:/srv:z" -w /srv \
-    registry.fedoraproject.org/fedora:44 bash -c 'dnf -q -y install python3 >/dev/null 2>&1; exec python3 -m http.server 8000' >/dev/null
+    "$IMAGE" python3 -m http.server 8000 >/dev/null
 known repo
 systemd_container() { # NAME
     "$PODMAN" run -d --name "$1" --hostname "$1" --network "$NET" "${HOSTS[@]}" --systemd=always --privileged \

@@ -109,6 +109,9 @@ else
     install -m 0644 "$tmp/openvibes.repo" /etc/yum.repos.d/openvibes.repo
 fi
 rpm --import "$tmp/openvibes.gpg"
+# dnf keeps a repository index for up to 48 h; one cached before a release
+# does not list the new packages.
+dnf makecache -y -q --refresh --repo openvibes >/dev/null || die "could not load the OpenVIBES repository index"
 done_so_far="repository added"
 
 if [ "$mode" = platform ]; then

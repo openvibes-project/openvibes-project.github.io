@@ -118,11 +118,15 @@ if [ "$mode" = platform ]; then
     dnf install -y openvibes-admin || die "dnf could not install openvibes-admin"
     done_so_far="openvibes-admin installed"
     user=${SUDO_USER:-}
-    if [ -n "$user" ] && [ "$user" != root ] && (: </dev/tty) 2>/dev/null; then
+    # Only when stdin is the terminal (sudo sh install.sh, or
+    # sudo sh -c "$(curl ...)"): under curl | sudo sh, stdin is the pipe and
+    # sudo (use_pty, the default since 1.9.14) kills a TUI that takes over
+    # the terminal (seen 2026-09-29), so we print the next step instead.
+    if [ -n "$user" ] && [ "$user" != root ] && [ -t 0 ]; then
         say "opening the administration TUI (Setup) as $user"
         home=$(getent passwd "$user" | cut -d: -f6)
         rm -rf "$tmp"   # exec below replaces this shell: the EXIT trap will not run
-        exec runuser -u "$user" -- env HOME="$home" USER="$user" /usr/bin/openvibes-admin </dev/tty >/dev/tty 2>&1
+        exec runuser -u "$user" -- env HOME="$home" USER="$user" /usr/bin/openvibes-admin
     fi
     say "installed. Next, as your own user: openvibes-admin (the Setup screen),"
     say "or as root: openvibes-admin setup --quick --components ingest,console,distribution,vulns,rules,agent --hostname NAME --root-key-out /root/openvibes-root-ca.key"

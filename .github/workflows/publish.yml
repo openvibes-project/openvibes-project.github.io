@@ -1,12 +1,14 @@
 # Every action is pinned to a full commit SHA with its version in a comment.
 # Rebuilds the package repository from every OpenVIBES release, checks and
 # signs it, and deploys it with the installer (openvibes-platform
-# docs/specs/2026-09-27-releases-design.md §3).
+# docs/specs/2026-09-27-releases-design.md §3). Releases are picked up by a
+# schedule rather than a dispatch from the code repositories, so no token is
+# needed; a scheduled run deploys only when the release list changed.
 name: Publish
 
 on:
-  repository_dispatch:
-    types: [release-published]
+  schedule:
+    - cron: '7,37 * * * *'
   workflow_dispatch:
   push:
     branches: [main]
@@ -21,8 +23,33 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  check:
+    name: New releases?
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.diff.outputs.changed }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: diff
+        name: Compare with the deployed release list
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bash scripts/releases.sh > releases.txt
+          if [ "$GITHUB_EVENT_NAME" = schedule ] &&
+              curl -fsS https://openvibes-project.github.io/releases.txt | cmp -s - releases.txt; then
+              echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+              echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
     name: Build the site
+    needs: check
+    if: needs.check.outputs.changed == 'true'
     runs-on: ubuntu-latest
     container: registry.fedoraproject.org/fedora:44
     steps:
@@ -35,7 +62,10 @@ jobs:
       - name: Collect released packages
         env:
           GH_TOKEN: ${{ github.token }}
-        run: bash scripts/collect.sh site/rpm/fedora/44/x86_64
+        run: |
+          mkdir -p site
+          bash scripts/releases.sh > site/releases.txt
+          bash scripts/collect.sh site/rpm/fedora/44/x86_64
       - name: Check, index and sign
         env:
           RPM_SIGNING_KEY: ${{ secrets.RPM_SIGNING_KEY }}

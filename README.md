@@ -16,12 +16,16 @@ The OpenVIBES package repository and installer, published at
   written into `install.sh`. Check: `gpg --show-keys openvibes.gpg`.
 
 No package is ever committed here. A release in openvibes-platform,
-openvibes-agent or openvibes-rules signs its RPMs, checks them, and
-dispatches `release-published`;
-`.github/workflows/publish.yml` then collects every release
+openvibes-agent or openvibes-rules signs its RPMs and checks them. Every 30
+minutes `.github/workflows/publish.yml` compares the release list
+(`scripts/releases.sh`) with the deployed `releases.txt`; when it changed
+(or on a push or a manual run: `gh workflow run publish.yml`), it collects
+every release
 (`scripts/collect.sh`), refuses to publish if any package fails the key
 check, indexes and signs the metadata (`scripts/build-repo.sh`), and deploys
-the site. `tests/test-build-repo.sh` tests that (CI).
+the site. `tests/test-build-repo.sh` tests that (CI). No token is involved.
+GitHub disables schedules after 60 days without a commit here; if that
+happens, re-enable the workflow under Actions.
 
 ## Replacing the key
 

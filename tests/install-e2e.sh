@@ -29,8 +29,8 @@ cleanup() {
     local status=$?
     if ((status != 0)); then
         for c in platform agent; do
-            echo "--- $c: openvibes-ingest, openvibes-agent"
-            "$PODMAN" exec "$c" journalctl -u openvibes-ingest -u openvibes-agent --no-pager -n 20 2>/dev/null || true
+            echo "--- $c: openvibes-ingest, openvibes-distribution, openvibes-agent"
+            "$PODMAN" exec "$c" journalctl -u openvibes-ingest -u openvibes-distribution -u openvibes-agent --no-pager -n 30 2>/dev/null || true
         done
     fi
     # KEEP=1 leaves the containers for inspection after a failure.

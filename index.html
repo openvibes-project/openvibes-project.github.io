@@ -15,8 +15,9 @@
 <p>Signed Fedora 44 packages and the installer for
 <a href="https://github.com/openvibes-project">OpenVIBES</a>.</p>
 <h2>Install the platform</h2>
-<pre>curl -fsSL https://openvibes-project.github.io/install.sh | sudo sh</pre>
+<pre>sudo sh -c &quot;$(curl -fsSL https://openvibes-project.github.io/install.sh)&quot;</pre>
 <p>It adds this repository, installs the administration tool and opens its Setup.
+No output at all means the download failed (check your connection and run it again).
 Safer: download <a href="install.sh">install.sh</a>, read it, then run <code>sudo sh install.sh</code>.</p>
 <h2>Add an agent</h2>
 <p>Run the command the platform's Setup shows (or <code>openvibes-admin agent command</code>) on the host.</p>

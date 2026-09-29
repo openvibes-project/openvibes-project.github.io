@@ -1,9 +1,10 @@
 #!/bin/sh
 # OpenVIBES installer (https://openvibes-project.github.io/install.sh).
-#   curl -fsSL https://openvibes-project.github.io/install.sh | sudo sh
+#   sudo sh -c "$(curl -fsSL https://openvibes-project.github.io/install.sh)"
 #       adds the signed OpenVIBES package repository, installs the platform's
-#       administration tool and opens its Setup.
-#   … | sudo sh -s -- --agent --platform HOST[:PORT] --token TOKEN --ca-sha256 FP
+#       administration tool and opens its Setup (piped into sudo sh, it
+#       prints how to open Setup instead: a pipe is not a terminal).
+#   curl -fsSL https://openvibes-project.github.io/install.sh | sudo sh -s -- --agent --platform HOST[:PORT] --token TOKEN --ca-sha256 FP
 #       installs the agent and enrolls it with that platform, trusting the
 #       platform's CA only if its SHA-256 fingerprint is FP.
 # Safer: download it, read it, then run: sudo sh install.sh [ARGS].
@@ -118,10 +119,10 @@ if [ "$mode" = platform ]; then
     dnf install -y openvibes-admin || die "dnf could not install openvibes-admin"
     done_so_far="openvibes-admin installed"
     user=${SUDO_USER:-}
-    # Only when stdin is the terminal (sudo sh install.sh, or
-    # sudo sh -c "$(curl ...)"): under curl | sudo sh, stdin is the pipe and
-    # sudo (use_pty, the default since 1.9.14) kills a TUI that takes over
-    # the terminal (seen 2026-09-29), so we print the next step instead.
+    # Only when stdin is the terminal (sudo sh -c "$(curl ...)", the
+    # documented command, or sudo sh install.sh). Under curl | sudo sh stdin
+    # is the pipe, and sudo killed the TUI opened on /dev/tty two seconds in
+    # (2026-09-29, sudo 1.9.17p2), so we print the next step instead.
     if [ -n "$user" ] && [ "$user" != root ] && [ -t 0 ]; then
         say "opening the administration TUI (Setup) as $user"
         home=$(getent passwd "$user" | cut -d: -f6)

@@ -3,9 +3,9 @@
 The OpenVIBES package repository and installer, published at
 <https://openvibes-project.github.io/>:
 
-- `install.sh`: `curl -fsSL https://openvibes-project.github.io/install.sh | sudo sh`
+- `install.sh`: `sudo sh -c "$(curl -fsSL https://openvibes-project.github.io/install.sh)"`
   installs the platform's administration tool and opens its Setup;
-  `… | sudo sh -s -- --agent --platform HOST --token TOKEN --ca-sha256 FP`
+  `curl -fsSL …/install.sh | sudo sh -s -- --agent --platform HOST --token TOKEN --ca-sha256 FP`
   installs and enrolls an agent. Fedora 44 on x86_64.
 - `rpm/fedora/44/x86_64/`: every released package of
   [openvibes-platform](https://github.com/openvibes-project/openvibes-platform)

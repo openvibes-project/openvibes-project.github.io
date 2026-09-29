@@ -66,10 +66,12 @@ if [ "$mode" = agent ]; then
         case $rules in *[!A-Za-z0-9.:_,-]*) die "--rules: unexpected characters" ;; esac
         rule_set=${rules%%,*} rest=${rules#*,}
         rule_issuer=${rest%%,*} rule_key=${rest#*,}
+        # SET and ISSUER are agent identifiers: 1-128 of the characters above.
         { [ -n "$rule_set" ] && [ -n "$rule_issuer" ] && [ "$rest" != "$rules" ] &&
+            [ "${#rule_set}" -le 128 ] && [ "${#rule_issuer}" -le 128 ] &&
             [ "$rule_key" != "$rest" ] && [ "${#rule_key}" = 43 ] &&
             case $rule_key in *[!A-Za-z0-9_-]*) false ;; *) true ;; esac; } ||
-            die "--rules: want SET,ISSUER,KEY (a 43-character base64url key)"
+            die "--rules: want SET,ISSUER,KEY (SET and ISSUER up to 128 characters, a 43-character base64url key)"
     fi
     host=${platform%:*}
     port=18423

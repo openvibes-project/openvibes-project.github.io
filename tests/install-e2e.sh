@@ -85,7 +85,7 @@ ok "test repository signed ($FPR)"
 # boots in the container, so replies to podman's address never arrive and
 # the other containers cannot reach it: keep podman's MAC.
 printf 'FROM registry.fedoraproject.org/fedora:44
-RUN dnf -q -y install systemd postgresql-server procps-ng util-linux curl polkit sudo python3 && dnf -q -y remove gnupg2 || true; dnf clean all
+RUN dnf -q -y install systemd postgresql-server procps-ng util-linux curl polkit sudo python3 openssl && dnf -q -y remove gnupg2 || true; dnf clean all
 RUN mkdir -p /etc/systemd/network && printf "[Match]\\nOriginalName=*\\n[Link]\\nMACAddressPolicy=none\\n" > /etc/systemd/network/99-default.link
 ' | "$PODMAN" build -q -t "$IMAGE" -f - "$W" >/dev/null
 "$PODMAN" network create "$NET" >/dev/null
@@ -145,8 +145,7 @@ refused() { # DESC CONTAINER ARGS…
 # from another CA: the fingerprint matches, the server check must not.
 in_c platform 'cat /etc/openvibes/pki/root.crt' > "$W/root1.pem"
 "$PODMAN" run -d --name platform2 --hostname platform2 --network "$NET" "${HOSTS[@]}" -v "$W:/test:z" \
-    registry.fedoraproject.org/fedora:44 bash -c '
-        dnf -q -y install openssl >/dev/null 2>&1
+    "$IMAGE" bash -c '
         mkdir -p /srv/v1 && cp /test/root1.pem /srv/v1/ca && cd /srv
         openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 1 \
             -subj /CN=platform2 -addext subjectAltName=DNS:platform2 -keyout /k.pem -out /c.pem 2>/dev/null

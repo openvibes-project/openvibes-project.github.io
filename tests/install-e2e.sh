@@ -154,10 +154,13 @@ known platform2
 systemd_container agent2
 TOKEN=$(sed -n 's/.*--token \([^ ]*\).*/\1/p' <<<"$ARGS")
 FP=$(sed -n 's/.*--ca-sha256 \([^ ]*\).*/\1/p' <<<"$ARGS")
+RULES=$(sed -n 's/.*--rules \([^ ]*\).*/\1/p' <<<"$ARGS")
 refused "a wrong package key" agent2 \
     "OPENVIBES_SITE=http://repo:8000 OPENVIBES_KEY_FINGERPRINT=$(printf '0%.0s' {1..40}) sh /test/install.sh $ARGS"
 refused "a malformed --rules" agent2 \
     "$ENV sh /test/install.sh --agent --platform platform --token $TOKEN --ca-sha256 $FP --rules 'baseline,x;y,z'"
+refused "a --distribution-port that is not a port" agent2 \
+    "$ENV sh /test/install.sh --agent --platform platform --token $TOKEN --ca-sha256 $FP --rules $RULES --distribution-port 0"
 refused "a --rules set over 128 characters" agent2 \
     "$ENV sh /test/install.sh --agent --platform platform --token $TOKEN --ca-sha256 $FP --rules $(printf 's%.0s' {1..129}),i,$(printf 'k%.0s' {1..43})"
 refused "a wrong CA fingerprint" agent2 \

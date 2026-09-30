@@ -4,7 +4,7 @@
 #       adds the signed OpenVIBES package repository, installs the platform's
 #       administration tool and opens its Setup (piped into sudo sh, it
 #       prints how to open Setup instead: a pipe is not a terminal).
-#   curl -fsSL https://openvibes-project.github.io/install.sh | sudo sh -s -- --agent --platform HOST[:PORT] --token TOKEN --ca-sha256 FP
+#   curl -fsSL https://openvibes-project.github.io/install.sh | sudo sh -s -- --agent --platform HOST[:PORT] --token TOKEN --ca-sha256 FP [--rules SET,ISSUER,KEY [--distribution-port PORT]]
 #       installs the agent and enrolls it with that platform, trusting the
 #       platform's CA only if its SHA-256 fingerprint is FP.
 # Safer: download it, read it, then run: sudo sh install.sh [ARGS].
@@ -30,12 +30,12 @@ say() { printf 'openvibes install: %s\n' "$1"; }
 usage() {
     cat >&2 <<'EOF'
 usage: install.sh                          install the platform's administration tool
-       install.sh --agent --platform HOST[:PORT] --token TOKEN --ca-sha256 FP [--rules SET,ISSUER,KEY]
+       install.sh --agent --platform HOST[:PORT] --token TOKEN --ca-sha256 FP [--rules SET,ISSUER,KEY [--distribution-port PORT]]
 EOF
     exit 2
 }
 
-mode=platform platform='' token='' fp='' rules=''
+mode=platform platform='' token='' fp='' rules='' dport=''
 while [ $# -gt 0 ]; do
     case $1 in
         --agent) mode=agent ;;
@@ -43,6 +43,7 @@ while [ $# -gt 0 ]; do
         --token) [ $# -ge 2 ] || usage; token=$2; shift ;;
         --ca-sha256) [ $# -ge 2 ] || usage; fp=$2; shift ;;
         --rules) [ $# -ge 2 ] || usage; rules=$2; shift ;;
+        --distribution-port) [ $# -ge 2 ] || usage; dport=$2; shift ;;
         -h|--help) usage ;;
         *) usage ;;
     esac
@@ -83,6 +84,15 @@ if [ "$mode" = agent ]; then
         ''|*[!0-9]*) die "--platform: $port is not a port" ;;
     esac
     [ "$port" -ge 1 ] && [ "$port" -le 65535 ] || die "--platform: $port is not a port"
+    # The rules come from the distribution service, on 18424 unless the
+    # platform chose another port.
+    if [ -n "$dport" ]; then
+        [ -n "$rules" ] || die "--distribution-port needs --rules"
+        case $dport in
+            *[!0-9]*|0*) die "--distribution-port: $dport is not a port" ;;
+        esac
+        [ "$dport" -ge 1 ] && [ "$dport" -le 65535 ] || die "--distribution-port: $dport is not a port"
+    fi
     case $token in
         *[!A-Za-z0-9_-]*) die "--token is not an enrollment token" ;;
     esac
@@ -171,7 +181,7 @@ enrollment_token_file = "$AGENT_DIR/token"
 EOF
 if [ -n "$rules" ]; then
     cat >> "$tmp/agent.toml" <<EOF
-distribution_url = "https://$host"
+distribution_url = "https://$host${dport:+:$dport}"
 
 [[rule_sets]]
 id = "$rule_set"

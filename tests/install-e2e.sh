@@ -135,9 +135,11 @@ wait_for "the agent accepted the baseline rule set" 180 platform \
 ok "the enrolled agent fetched and accepted the baseline rule set"
 
 # 3. Refusals: each exits non-zero and installs no agent.
-refused() { # DESC CONTAINER ARGS…
-    local desc=$1 c=$2; shift 2
-    if in_c "$c" "$*" >/dev/null 2>&1; then fail "$desc: accepted"; fi
+refused() { # DESC REASON CONTAINER ARGS…: refused for REASON (a fixed string)
+    local desc=$1 reason=$2 c=$3 out; shift 3
+    if out=$(in_c "$c" "$*" 2>&1); then fail "$desc: accepted"; fi
+    # The right refusal, not an earlier one that happens to exit non-zero.
+    grep -qF -- "$reason" <<<"$out" || { echo "$out"; fail "$desc: refused, but not for \"$reason\""; }
     if in_c "$c" 'rpm -q --quiet openvibes-agent' 2>/dev/null; then fail "$desc: agent installed"; fi
     ok "$desc: refused"
 }
@@ -155,18 +157,18 @@ systemd_container agent2
 TOKEN=$(sed -n 's/.*--token \([^ ]*\).*/\1/p' <<<"$ARGS")
 FP=$(sed -n 's/.*--ca-sha256 \([^ ]*\).*/\1/p' <<<"$ARGS")
 RULES=$(sed -n 's/.*--rules \([^ ]*\).*/\1/p' <<<"$ARGS")
-refused "a wrong package key" agent2 \
+refused "a wrong package key" "the package key's fingerprint is" agent2 \
     "OPENVIBES_SITE=http://repo:8000 OPENVIBES_KEY_FINGERPRINT=$(printf '0%.0s' {1..40}) sh /test/install.sh $ARGS"
-refused "a malformed --rules" agent2 \
+refused "a malformed --rules" "--rules: unexpected characters" agent2 \
     "$ENV sh /test/install.sh --agent --platform platform --token $TOKEN --ca-sha256 $FP --rules 'baseline,x;y,z'"
-refused "a --distribution-port that is not a port" agent2 \
+refused "a --distribution-port that is not a port" "--distribution-port: 0 is not a port" agent2 \
     "$ENV sh /test/install.sh --agent --platform platform --token $TOKEN --ca-sha256 $FP --rules $RULES --distribution-port 0"
-refused "a --rules set over 128 characters" agent2 \
+refused "a --rules set over 128 characters" "--rules: want SET,ISSUER,KEY" agent2 \
     "$ENV sh /test/install.sh --agent --platform platform --token $TOKEN --ca-sha256 $FP --rules $(printf 's%.0s' {1..129}),i,$(printf 'k%.0s' {1..43})"
-refused "a wrong CA fingerprint" agent2 \
+refused "a wrong CA fingerprint" "the platform's CA has fingerprint" agent2 \
     "$ENV sh /test/install.sh --agent --platform platform --token $TOKEN --ca-sha256 $(printf '0%.0s' {1..64})"
 wait_for "the foreign server answers" 60 agent2 'curl -ksf https://platform2:18423/v1/ca -o /dev/null'
-refused "a server whose certificate is not from that CA" agent2 \
+refused "a server whose certificate is not from that CA" "does not hold a certificate from that CA" agent2 \
     "$ENV sh /test/install.sh --agent --platform platform2 --token $TOKEN --ca-sha256 $FP"
 for image in registry.fedoraproject.org/fedora:43 docker.io/library/debian:stable; do
     name=$([[ $image == *fedora* ]] && echo f43 || echo debian)
@@ -176,7 +178,8 @@ for image in registry.fedoraproject.org/fedora:43 docker.io/library/debian:stabl
     ok "$image: refused"
 done
 before=$(in_c agent 'sha256sum /etc/openvibes-agent/agent.toml')
-if in_c agent "$ENV sh /test/install.sh $ARGS" >/dev/null 2>&1; then fail "a configured agent was overwritten"; fi
+if out=$(in_c agent "$ENV sh /test/install.sh $ARGS" 2>&1); then fail "a configured agent was overwritten"; fi
+grep -qF "an agent is already configured" <<<"$out" || { echo "$out"; fail "a configured agent: wrong refusal"; }
 [[ "$(in_c agent 'sha256sum /etc/openvibes-agent/agent.toml')" == "$before" ]] || fail "agent.toml changed"
 ok "an already configured agent: refused, agent.toml unchanged"
 echo "install-e2e: all checks passed"

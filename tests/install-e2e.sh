@@ -139,6 +139,13 @@ ok "the enrolled agent fetched and accepted the baseline rule set"
 # 2b. Distribution moved (platform #92, board #62): a Repair moves it only
 # with --move-agent-ports and says what that means for enrolled agents; the
 # new agent line carries the port, and an agent from it gets the rules there.
+before=$(in_c platform 'sha256sum /etc/openvibes/setup.toml')
+if out=$(in_c platform 'openvibes-admin setup --repair --distribution-port 18502' 2>&1); then
+    fail "moving distribution without --move-agent-ports was accepted"
+fi
+grep -qF -- "add --move-agent-ports" <<<"$out" || { echo "$out"; fail "moving distribution: wrong refusal"; }
+[[ "$(in_c platform 'sha256sum /etc/openvibes/setup.toml')" == "$before" ]] || fail "setup.toml changed on a refused move"
+ok "moving distribution without --move-agent-ports: refused, setup.toml unchanged"
 in_c platform 'openvibes-admin setup --repair --distribution-port 18501 --move-agent-ports' \
     > "$W/repair.out" 2>&1 || { cat "$W/repair.out"; fail "setup --repair --distribution-port"; }
 grep -q "agents on other hosts still call 18424" "$W/repair.out" ||

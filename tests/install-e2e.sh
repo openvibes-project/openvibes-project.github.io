@@ -30,10 +30,20 @@ names=(repo platform agent agent2 agent3 platform2 f43 debian)
 cleanup() {
     local status=$?
     if ((status != 0)); then
-        for c in platform agent; do
+        for c in platform agent agent3; do
             echo "--- $c: openvibes-ingest, openvibes-distribution, openvibes-agent"
-            "$PODMAN" exec "$c" journalctl -u openvibes-ingest -u openvibes-distribution -u openvibes-agent --no-pager -n 30 2>/dev/null || true
+            "$PODMAN" exec "$c" journalctl -u openvibes-ingest -u openvibes-distribution -u openvibes-agent --no-pager -n 60 2>/dev/null || true
         done
+        # What the platform stored for each agent: a missed health write
+        # shows here, not in the journals.
+        echo "--- platform: agents as stored"
+        # shellcheck disable=SC2016  # expands inside the container
+        "$PODMAN" exec platform bash -c '
+            for id in $(runuser -u openvibes-admin -- openvibes-admin agent list | awk "{print \$1}"); do
+                runuser -u openvibes-admin -- openvibes-admin agent show "$id"
+            done
+            runuser -u postgres -- psql -d openvibes -Atc \
+                "SELECT agent_id, last_seen_at, health_at, health->'"'"'rule_sets'"'"' FROM agents"' 2>/dev/null || true
     fi
     # KEEP=1 leaves the containers for inspection after a failure.
     if ((status != 0)) && [[ -n ${KEEP:-} ]]; then exit "$status"; fi

@@ -6,6 +6,8 @@
 #      command → the one-line agent command;
 #   2. agent: that command enrolls the agent (install.sh --agent) and,
 #      through its --rules, the agent fetches and accepts the baseline;
+#   2b. a Repair moves distribution (--move-agent-ports); an agent from the
+#      new line (--distribution-port) accepts the baseline there;
 #   3. refusals, each leaving no agent package behind: a wrong package-key
 #      fingerprint, a wrong CA fingerprint, a server whose certificate is
 #      not from the CA it serves, Fedora 43 and Debian, and an agent that
@@ -24,7 +26,7 @@ IMAGE=ov-install-e2e:44
 fail() { echo "FAIL: $*" >&2; exit 1; }
 ok() { echo "ok: $*"; }
 in_c() { "$PODMAN" exec "$1" bash -c "$2"; }
-names=(repo platform agent agent2 platform2 f43 debian)
+names=(repo platform agent agent2 agent3 platform2 f43 debian)
 cleanup() {
     local status=$?
     if ((status != 0)); then
@@ -133,6 +135,25 @@ AGENT_ID=$(in_c platform 'runuser -u openvibes-admin -- openvibes-admin agent li
 wait_for "the agent accepted the baseline rule set" 180 platform \
     "runuser -u openvibes-admin -- openvibes-admin agent show $AGENT_ID | grep -q '^rule set baseline version [0-9]'"
 ok "the enrolled agent fetched and accepted the baseline rule set"
+
+# 2b. Distribution moved (platform #92, board #62): a Repair moves it only
+# with --move-agent-ports and says what that means for enrolled agents; the
+# new agent line carries the port, and an agent from it gets the rules there.
+in_c platform 'openvibes-admin setup --repair --distribution-port 18501 --move-agent-ports' \
+    > "$W/repair.out" 2>&1 || { cat "$W/repair.out"; fail "setup --repair --distribution-port"; }
+grep -q "agents on other hosts still call 18424" "$W/repair.out" ||
+    { cat "$W/repair.out"; fail "no word about agents on other hosts"; }
+LINE3=$(in_c platform 'runuser -u openvibes-admin -- openvibes-admin agent command --platform platform' | head -1)
+grep -q -- " --distribution-port 18501" <<<"$LINE3" || fail "agent command has no --distribution-port: $LINE3"
+systemd_container agent3
+out=$(in_c agent3 "$ENV sh /test/install.sh ${LINE3#*sh -s -- }" 2>&1) || { echo "$out"; fail "install.sh --agent (moved distribution)"; }
+AGENT3=$(sed -n 's/.*enrolled as \(agent\.[0-9a-f-]*\).*/\1/p' <<<"$out")
+[[ -n $AGENT3 ]] || { echo "$out"; fail "no 'enrolled as' (moved distribution)"; }
+in_c agent3 'grep -qx "distribution_url = \"https://platform:18501\"" /etc/openvibes-agent/agent.toml' ||
+    fail "agent.toml does not name the moved distribution port"
+wait_for "the agent accepted the baseline rule set through port 18501" 180 platform \
+    "runuser -u openvibes-admin -- openvibes-admin agent show $AGENT3 | grep -q '^rule set baseline version [0-9]'"
+ok "distribution moved by Repair; an agent from the new line gets the rules there"
 
 # 3. Refusals: each exits non-zero and installs no agent.
 refused() { # DESC REASON CONTAINER ARGS…: refused for REASON (a fixed string)

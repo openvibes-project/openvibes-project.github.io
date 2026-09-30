@@ -24,7 +24,7 @@ concurrency:
 jobs:
   check:
     name: New releases?
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       changed: ${{ steps.diff.outputs.changed }}
     steps:
@@ -49,7 +49,7 @@ jobs:
     name: Build the site
     needs: check
     if: needs.check.outputs.changed == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     container: registry.fedoraproject.org/fedora:44
     steps:
       - name: Install tools
@@ -78,7 +78,7 @@ jobs:
   deploy:
     name: Deploy
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       pages: write
       id-token: write

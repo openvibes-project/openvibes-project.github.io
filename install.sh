@@ -4,7 +4,7 @@
 #       adds the signed OpenVIBES package repository, installs the platform's
 #       administration tool and opens its Setup (piped into sudo sh, it
 #       prints how to open Setup instead: a pipe is not a terminal).
-#   curl -fsSL https://openvibes-project.github.io/install.sh | sudo sh -s -- --agent --platform HOST[:PORT] --token TOKEN --ca-sha256 FP [--rules SET,ISSUER,KEY [--distribution-port PORT]]
+#   curl -fsSL https://openvibes-project.github.io/install.sh | sudo sh -s -- --agent --platform HOST[:PORT] --token TOKEN --ca-sha256 FP [--rules SET,ISSUER,KEY [--alarm-rules SET,ISSUER,KEY] [--distribution-port PORT]]
 #       installs the agent and enrolls it with that platform, trusting the
 #       platform's CA only if its SHA-256 fingerprint is FP.
 # Safer: download it, read it, then run: sudo sh install.sh [ARGS].
@@ -30,12 +30,12 @@ say() { printf 'openvibes install: %s\n' "$1"; }
 usage() {
     cat >&2 <<'EOF'
 usage: install.sh                          install the platform's administration tool
-       install.sh --agent --platform HOST[:PORT] --token TOKEN --ca-sha256 FP [--rules SET,ISSUER,KEY [--distribution-port PORT]]
+       install.sh --agent --platform HOST[:PORT] --token TOKEN --ca-sha256 FP [--rules SET,ISSUER,KEY [--alarm-rules SET,ISSUER,KEY] [--distribution-port PORT]]
 EOF
     exit 2
 }
 
-mode=platform platform='' token='' fp='' rules='' dport=''
+mode=platform platform='' token='' fp='' rules='' alarm_rules='' dport=''
 while [ $# -gt 0 ]; do
     case $1 in
         --agent) mode=agent ;;
@@ -43,6 +43,7 @@ while [ $# -gt 0 ]; do
         --token) [ $# -ge 2 ] || usage; token=$2; shift ;;
         --ca-sha256) [ $# -ge 2 ] || usage; fp=$2; shift ;;
         --rules) [ $# -ge 2 ] || usage; rules=$2; shift ;;
+        --alarm-rules) [ $# -ge 2 ] || usage; alarm_rules=$2; shift ;;
         --distribution-port) [ $# -ge 2 ] || usage; dport=$2; shift ;;
         -h|--help) usage ;;
         *) usage ;;
@@ -63,16 +64,30 @@ if [ "$mode" = agent ]; then
     [ -n "$platform" ] && [ -n "$token" ] && [ -n "$fp" ] || usage
     # --rules SET,ISSUER,KEY: the rule set the platform publishes and the
     # key it trusts (from the same fingerprint-checked command line).
+    # SET,ISSUER,KEY: SET and ISSUER are agent identifiers (1-128 of the
+    # characters below), KEY a 43-character base64url public key.
+    check_set() { # FLAG VALUE
+        case $2 in *[!A-Za-z0-9.:_,-]*) die "$1: unexpected characters" ;; esac
+        set_id=${2%%,*} rest=${2#*,}
+        set_issuer=${rest%%,*} set_key=${rest#*,}
+        { [ -n "$set_id" ] && [ -n "$set_issuer" ] && [ "$rest" != "$2" ] &&
+            [ "${#set_id}" -le 128 ] && [ "${#set_issuer}" -le 128 ] &&
+            [ "$set_key" != "$rest" ] && [ "${#set_key}" = 43 ] &&
+            case $set_key in *[!A-Za-z0-9_-]*) false ;; *) true ;; esac; } ||
+            die "$1: want SET,ISSUER,KEY (SET and ISSUER up to 128 characters, a 43-character base64url key)"
+    }
     if [ -n "$rules" ]; then
-        case $rules in *[!A-Za-z0-9.:_,-]*) die "--rules: unexpected characters" ;; esac
-        rule_set=${rules%%,*} rest=${rules#*,}
-        rule_issuer=${rest%%,*} rule_key=${rest#*,}
-        # SET and ISSUER are agent identifiers: 1-128 of the characters above.
-        { [ -n "$rule_set" ] && [ -n "$rule_issuer" ] && [ "$rest" != "$rules" ] &&
-            [ "${#rule_set}" -le 128 ] && [ "${#rule_issuer}" -le 128 ] &&
-            [ "$rule_key" != "$rest" ] && [ "${#rule_key}" = 43 ] &&
-            case $rule_key in *[!A-Za-z0-9_-]*) false ;; *) true ;; esac; } ||
-            die "--rules: want SET,ISSUER,KEY (SET and ISSUER up to 128 characters, a 43-character base64url key)"
+        check_set --rules "$rules"
+        rule_set=$set_id rule_issuer=$set_issuer rule_key=$set_key
+    fi
+    # --alarm-rules: the threat-alarm rule set (P14). It shares --rules'
+    # distribution URL, and only a P14 agent gets it (checked after install).
+    if [ -n "$alarm_rules" ]; then
+        [ -n "$rules" ] || die "--alarm-rules needs --rules"
+        check_set --alarm-rules "$alarm_rules"
+        alarm_set=$set_id alarm_issuer=$set_issuer alarm_key=$set_key
+        # Two rule sets with one id make the agent refuse its config.
+        [ "$alarm_set" != "$rule_set" ] || die "--alarm-rules: the same rule set as --rules ($rule_set)"
     fi
     host=${platform%:*}
     port=18423
@@ -179,6 +194,18 @@ platform_url = "$platform_url"
 platform_ca_file = "$AGENT_DIR/platform-ca.crt"
 enrollment_token_file = "$AGENT_DIR/token"
 EOF
+# Threat alarms only for an agent that knows the collector: the P14 agent
+# package ships its exec audit rule; an older agent would refuse the name.
+alarms=''
+if [ -n "$alarm_rules" ] && [ ! -f /etc/audit/rules.d/openvibes-agent.rules ]; then
+    say "this agent has no threat alarms (needs openvibes-agent 0.2 or later); --alarm-rules ignored"
+elif [ -n "$alarm_rules" ]; then
+    alarms=yes
+    cat >> "$tmp/agent.toml" <<EOF
+# Threat alarms need auditd running (it loads the agent's exec rule).
+collectors = ["processes", "packages", "ports", "process_events"]
+EOF
+fi
 if [ -n "$rules" ]; then
     cat >> "$tmp/agent.toml" <<EOF
 distribution_url = "https://$host${dport:+:$dport}"
@@ -186,6 +213,14 @@ distribution_url = "https://$host${dport:+:$dport}"
 [[rule_sets]]
 id = "$rule_set"
 trusted_keys = [{ issuer_key_id = "$rule_issuer", public_key = "$rule_key" }]
+EOF
+fi
+if [ -n "$alarms" ]; then
+    cat >> "$tmp/agent.toml" <<EOF
+
+[[rule_sets]]
+id = "$alarm_set"
+trusted_keys = [{ issuer_key_id = "$alarm_issuer", public_key = "$alarm_key" }]
 EOF
 fi
 (umask 077 && printf '%s\n' "$token" > "$tmp/token")

@@ -86,6 +86,8 @@ if [ "$mode" = agent ]; then
         [ -n "$rules" ] || die "--alarm-rules needs --rules"
         check_set --alarm-rules "$alarm_rules"
         alarm_set=$set_id alarm_issuer=$set_issuer alarm_key=$set_key
+        # Two rule sets with one id make the agent refuse its config.
+        [ "$alarm_set" != "$rule_set" ] || die "--alarm-rules: the same rule set as --rules ($rule_set)"
     fi
     host=${platform%:*}
     port=18423
@@ -195,7 +197,9 @@ EOF
 # Threat alarms only for an agent that knows the collector: the P14 agent
 # package ships its exec audit rule; an older agent would refuse the name.
 alarms=''
-if [ -n "$alarm_rules" ] && [ -f /etc/audit/rules.d/openvibes-agent.rules ]; then
+if [ -n "$alarm_rules" ] && [ ! -f /etc/audit/rules.d/openvibes-agent.rules ]; then
+    say "this agent has no threat alarms (needs openvibes-agent 0.2 or later); --alarm-rules ignored"
+elif [ -n "$alarm_rules" ]; then
     alarms=yes
     cat >> "$tmp/agent.toml" <<EOF
 # Threat alarms need auditd running (it loads the agent's exec rule).

@@ -205,6 +205,8 @@ refused "a --rules set over 128 characters" "--rules: want SET,ISSUER,KEY" agent
     "$ENV sh /test/install.sh --agent --platform platform --token $TOKEN --ca-sha256 $FP --rules $(printf 's%.0s' {1..129}),i,$(printf 'k%.0s' {1..43})"
 refused "--alarm-rules without --rules" "--alarm-rules needs --rules" agent2 \
     "$ENV sh /test/install.sh --agent --platform platform --token $TOKEN --ca-sha256 $FP --alarm-rules $RULES"
+refused "--alarm-rules naming the --rules set" "--alarm-rules: the same rule set as --rules" agent2 \
+    "$ENV sh /test/install.sh --agent --platform platform --token $TOKEN --ca-sha256 $FP --rules $RULES --alarm-rules $RULES"
 refused "a malformed --alarm-rules" "--alarm-rules: want SET,ISSUER,KEY" agent2 \
     "$ENV sh /test/install.sh --agent --platform platform --token $TOKEN --ca-sha256 $FP --rules $RULES --alarm-rules a,b"
 refused "a wrong CA fingerprint" "the platform's CA has fingerprint" agent2 \

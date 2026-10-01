@@ -5,7 +5,9 @@
 #      --quick with the baseline rules published, openvibes-admin agent
 #      command → the one-line agent command;
 #   2. agent: that command enrolls the agent (install.sh --agent) and,
-#      through its --rules, the agent fetches and accepts the baseline;
+#      through its --rules and --alarm-rules, the agent gets the threat
+#      alarm collector (process_events) and fetches and accepts both the
+#      baseline and the baseline alarm rules (P14);
 #   2b. a Repair moves distribution (--move-agent-ports); an agent from the
 #      new line (--distribution-port) accepts the baseline there;
 #   3. refusals, each leaving no agent package behind: a wrong package-key
@@ -131,7 +133,12 @@ LINE=$(in_c platform 'runuser -u openvibes-admin -- openvibes-admin agent comman
 ARGS=${LINE#*sh -s -- }
 in_c platform 'runuser -u openvibes-admin -- openvibes-admin rules list' | grep -q '^baseline v[0-9]' ||
     { cat "$W/setup.out"; fail "baseline rules not published by Setup"; }
-ok "platform installed through install.sh and Setup; baseline rules published; agent command printed"
+# The rules package carries the threat-alarm rules (rules v2): Setup
+# publishes them and the agent line hands them on.
+in_c platform 'runuser -u openvibes-admin -- openvibes-admin rules list' | grep -q '^baseline-alarms v[0-9]' ||
+    { cat "$W/setup.out"; fail "baseline alarm rules not published by Setup"; }
+grep -q -- " --alarm-rules baseline-alarms," <<<"$LINE" || fail "agent command has no --alarm-rules: $LINE"
+ok "platform installed through install.sh and Setup; baseline and alarm rules published; agent command printed"
 
 # 2. An agent through the printed command.
 systemd_container agent
@@ -145,6 +152,15 @@ AGENT_ID=$(in_c platform 'runuser -u openvibes-admin -- openvibes-admin agent li
 wait_for "the agent accepted the baseline rule set" 180 platform \
     "runuser -u openvibes-admin -- openvibes-admin agent show $AGENT_ID | grep -q '^rule set baseline version [0-9]'"
 ok "the enrolled agent fetched and accepted the baseline rule set"
+# Threat alarms (P14): the collector is on, both rule sets are configured,
+# and the agent accepted the alarm rules too.
+in_c agent 'grep -q "^collectors = .*\"process_events\"" /etc/openvibes-agent/agent.toml' ||
+    { in_c agent 'cat /etc/openvibes-agent/agent.toml'; fail "agent.toml does not turn process_events on"; }
+[[ "$(in_c agent 'grep -c "^id = \"baseline\(-alarms\)\?\"$" /etc/openvibes-agent/agent.toml')" == 2 ]] ||
+    { in_c agent 'cat /etc/openvibes-agent/agent.toml'; fail "agent.toml does not hold both rule sets"; }
+wait_for "the agent accepted the baseline alarm rule set" 180 platform \
+    "runuser -u openvibes-admin -- openvibes-admin agent show $AGENT_ID | grep -q '^rule set baseline-alarms version [0-9]'"
+ok "the enrolled agent has process_events and accepted the baseline alarm rule set"
 
 # 2b. Distribution moved (platform #92, board #62): a Repair moves it only
 # with --move-agent-ports and says what that means for enrolled agents; the

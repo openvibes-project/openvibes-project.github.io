@@ -154,6 +154,9 @@ wait_for "the agent accepted the baseline rule set" 180 platform \
 ok "the enrolled agent fetched and accepted the baseline rule set"
 # Threat alarms (P14): the collector is on, both rule sets are configured,
 # and the agent accepted the alarm rules too.
+# A P15 agent (its package lists owners.conf) also gets "services".
+in_c agent 'rpm -ql openvibes-agent | grep -q /owners.conf$ || exit 0; grep -q "^collectors = .*\"services\"" /etc/openvibes-agent/agent.toml' ||
+    { in_c agent 'cat /etc/openvibes-agent/agent.toml'; fail "a P15 agent did not get the services collector"; }
 in_c agent 'grep -q "^collectors = .*\"process_events\"" /etc/openvibes-agent/agent.toml' ||
     { in_c agent 'cat /etc/openvibes-agent/agent.toml'; fail "agent.toml does not turn process_events on"; }
 [[ "$(in_c agent 'grep -c "^id = \"baseline\(-alarms\)\?\"$" /etc/openvibes-agent/agent.toml')" == 2 ]] ||

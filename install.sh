@@ -163,12 +163,15 @@ if [ "$mode" = platform ]; then
     # is the pipe, and sudo killed the TUI opened on /dev/tty two seconds in
     # (2026-09-29, sudo 1.9.17p2), so we print the next step instead.
     if [ -n "$user" ] && [ "$user" != root ] && [ -t 0 ]; then
-        say "opening the administration TUI (Setup) as $user"
+        say "opening the administration TUI (Setup)"
         home=$(getent passwd "$user" | cut -d: -f6)
         rm -rf "$tmp"   # exec below replaces this shell: the EXIT trap will not run
-        exec runuser -u "$user" -- env HOME="$home" USER="$user" /usr/bin/openvibes-admin
+        # As root (we run under sudo): Setup asks for no password (#92).
+        # SUDO_USER and HOME stay the person's, so Setup adds them to
+        # openvibes-operators and writes the root key into their home.
+        exec env HOME="$home" SUDO_USER="$user" /usr/bin/openvibes-admin
     fi
-    say "installed. Next, as your own user: openvibes-admin (the Setup screen),"
+    say "installed. Next: sudo openvibes-admin (the Setup screen),"
     say "or as root: openvibes-admin setup --quick --components ingest,console,distribution,vulns,rules,agent --hostname NAME --root-key-out /root/openvibes-root-ca.key"
     exit 0
 fi

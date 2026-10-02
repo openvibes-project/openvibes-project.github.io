@@ -142,8 +142,15 @@ ok "platform installed through install.sh and Setup; baseline and alarm rules pu
 
 # 2. An agent through the printed command.
 systemd_container agent
+# Fedora's stock audit rules switch syscall auditing off (board #112): the
+# installer must warn that alarms can't fire, and change nothing.
+in_c agent 'mkdir -p /etc/audit && printf -- "-D\n-a task,never\n" > /etc/audit/audit.rules'
 out=$(in_c agent "$ENV sh /test/install.sh $ARGS" 2>&1) || { echo "$out"; fail "install.sh --agent"; }
 grep -q "enrolled as agent\." <<<"$out" || { echo "$out"; fail "no 'enrolled as'"; }
+if [[ $ARGS == *--alarm-rules* ]]; then
+    grep -q "threat alarms can't fire" <<<"$out" || { echo "$out"; fail "no warning for -a task,never"; }
+    in_c agent 'grep -q "^-a task,never" /etc/audit/audit.rules' || fail "install.sh changed the audit rules"
+fi
 wait_for "the platform lists the agent as active" 30 platform \
     'runuser -u openvibes-admin -- openvibes-admin agent list | grep -q "  active  "'
 ok "agent enrolled through the one-line command"

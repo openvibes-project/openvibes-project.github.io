@@ -217,6 +217,13 @@ elif [ -n "$alarm_rules" ]; then
 collectors = ["processes", "packages", "ports", "process_events"$services]
 EOF
 fi
+# Fedora's default audit rules switch syscall auditing off for every task,
+# so the kernel reports no program starts and alarms could never fire. Say
+# so; never edit the host's audit rules (a system setting).
+if [ -n "$alarms" ] && grep -Eq '^-a[[:space:]]+(task,never|never,task)' /etc/audit/audit.rules 2>/dev/null; then
+    say "warning: threat alarms can't fire on this host: /etc/audit/audit.rules has '-a task,never'"
+    say "  fix: comment that line out in /etc/audit/rules.d/, run 'augenrules --load', then reboot"
+fi
 if [ -n "$rules" ]; then
     cat >> "$tmp/agent.toml" <<EOF
 distribution_url = "https://$host${dport:+:$dport}"

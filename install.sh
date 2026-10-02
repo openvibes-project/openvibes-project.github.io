@@ -222,7 +222,7 @@ fi
 # so; never edit the host's audit rules (a system setting).
 if [ -n "$alarms" ] && grep -Eq '^-a[[:space:]]+(task,never|never,task)' /etc/audit/audit.rules 2>/dev/null; then
     say "warning: threat alarms can't fire on this host: /etc/audit/audit.rules has '-a task,never'"
-    say "  fix: comment that line out in /etc/audit/rules.d/, run 'augenrules --load', then reboot"
+    say "  fix: comment it out in /etc/audit/rules.d/audit.rules and run 'augenrules --load' (new logins and restarted services are watched; a reboot covers everything)"
 fi
 if [ -n "$rules" ]; then
     cat >> "$tmp/agent.toml" <<EOF

@@ -201,9 +201,17 @@ if [ -n "$alarm_rules" ] && [ ! -f /etc/audit/rules.d/openvibes-agent.rules ]; t
     say "this agent has no threat alarms (needs openvibes-agent 0.2 or later); --alarm-rules ignored"
 elif [ -n "$alarm_rules" ]; then
     alarms=yes
+    # Ports and services for the asset view (P15) only for an agent that
+    # knows the collector: its package lists the owners.conf drop-in (by
+    # file list, so a nodocs install counts too). An older agent would
+    # refuse the name; without this list its own default applies.
+    services=''
+    if rpm -ql openvibes-agent 2>/dev/null | grep -q '/owners\.conf$'; then
+        services=', "services"'
+    fi
     cat >> "$tmp/agent.toml" <<EOF
 # Threat alarms need auditd running (it loads the agent's exec rule).
-collectors = ["processes", "packages", "ports", "process_events"]
+collectors = ["processes", "packages", "ports", "process_events"$services]
 EOF
 fi
 if [ -n "$rules" ]; then

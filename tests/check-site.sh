@@ -10,15 +10,23 @@ DIR=${1:-$(cd "$(dirname "$0")/.." && pwd)}
 SITE_GENERATED="releases.txt rpm"
 bad=0
 fail() { echo "FAIL: $*"; bad=1; }
+# has_id FILE ID: FILE has an element with exactly that id (not data-id=).
+has_id() { grep -qE "[[:space:]]id=\"$2\"" "$1"; }
 for page in "$DIR"/*.html; do
     name=$(basename "$page")
     while read -r ref; do
         case $ref in
             http://* | https://* | mailto:*) ;;
-            '#'*) grep -q "id=\"${ref#\#}\"" "$page" || fail "$name: no id for $ref" ;;
+            '#'*) has_id "$page" "${ref#\#}" || fail "$name: no id for $ref" ;;
             *)
                 case " $SITE_GENERATED " in *" ${ref%%/*} "*) continue ;; esac
-                [[ -e $DIR/${ref%%#*} ]] || fail "$name: $ref does not exist" ;;
+                path=${ref%%#*}
+                [[ -e $DIR/$path ]] || { fail "$name: $ref does not exist"; continue; }
+                # Another page's anchor: that page must have the id.
+                if [[ $ref == *'#'* ]]; then
+                    [[ -z $path || $path == ./ || $path == */ ]] && path=${path}index.html
+                    has_id "$DIR/$path" "${ref#*#}" || fail "$name: no id for $ref"
+                fi ;;
         esac
     done < <(grep -oE '(href|src)="[^"]*"' "$page" | sed -E 's/^(href|src)="(.*)"$/\2/')
 done

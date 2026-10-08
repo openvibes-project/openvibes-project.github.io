@@ -26,8 +26,7 @@ jobs:
       - name: Site pages and assets
         run: |
           bash tests/check-site.sh
-          bash tests/check-site.sh tests/fixtures/site-ok
-          ! bash tests/check-site.sh tests/fixtures/site-bad
+          bash tests/test-check-site.sh
       - name: Publishing refuses unsigned packages and an unset key
         run: bash tests/test-build-repo.sh
 

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OpenVIBES: light, self-hosted security for your own machines</title>
-<meta name="description" content="Free and open-source security platform for homelabs and small businesses: vulnerabilities, compliance, threat alarms and a local AI assistant, self-hosted.">
+<meta name="description" content="Free and open-source security platform for homelabs and small businesses: vulnerabilities, compliance, threat alarms and an optional AI assistant that runs on your platform, self-hosted.">
 <meta name="color-scheme" content="dark light">
 <link rel="stylesheet" href="site.css">
 </head>
@@ -23,10 +23,10 @@
     </nav>
     <span class="pill">Early release 0.2 · free and open source (MIT)</span>
     <h1>See what runs on your machines, and what threatens them.</h1>
-    <p class="lead">A light, self-hosted security platform for homelabs and small businesses: vulnerabilities, compliance, threat alarms and a local AI assistant, in one fast console.</p>
+    <p class="lead">A light, self-hosted security platform for homelabs and small businesses: vulnerabilities, compliance, threat alarms and an optional AI assistant that runs on your platform, in one fast console.</p>
     <div class="btns">
       <a class="btn btn-primary" href="https://openvibes-project.github.io/openvibes-platform/">Try the live demo</a>
-      <a class="btn btn-secondary" href="#get-started">Get started ↓</a>
+      <a class="btn btn-secondary" href="#get-started">Get started <span aria-hidden="true">↓</span></a>
       <span class="note">Free · self-hosted · platform on Fedora 44</span>
     </div>
     <div class="frame"><div class="bar" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -48,7 +48,7 @@
 
   <div class="feat rev"><div class="txt">
     <h3>Check your baseline</h3>
-    <p>Signed compliance rules run on every host. The baseline flags services exposed to the network, such as the Docker API, Telnet, Redis or a database, and risky servers like Telnet and rsh. Write your own rules and sign them on your platform.</p>
+    <p>Signed compliance rules run on every host. The baseline flags services exposed to the network, such as the Docker API, Redis or a database, and risky servers like Telnet and rsh. Write your own rules and sign them on your platform.</p>
     <ul><li>Baseline rules included</li><li>Your own rules, your own signing key</li></ul>
   </div><div class="shot"><img class="screen" src="assets/compliance.webp" width="1414" height="788" loading="lazy" alt="The Compliance view: findings by severity, with how many hosts each affects and their triage."></div></div>
 
@@ -60,7 +60,7 @@
 
   <div class="feat rev"><div class="txt">
     <h3>Ask in plain words</h3>
-    <p>An optional assistant runs on your own platform, not in a cloud. Ask what to fix first, which hosts are stale, or what a finding means.</p>
+    <p>An optional assistant runs on your own platform. Ask what to fix first, which hosts are stale, or what a finding means.</p>
     <ul><li>With the bundled model, nothing leaves your network</li><li>Answers link to the hosts and findings they are about</li></ul>
   </div><div class="shot"><img class="screen" src="assets/assistant.webp" width="1414" height="788" loading="lazy" alt="The assistant beside the dashboard, answering 'What should I fix first?'."></div></div>
 </div></section>
@@ -70,7 +70,7 @@
   <h2>Built for people who are tired of heavy security tools</h2>
   <div class="tiles">
     <div class="tile"><b>Interface first</b><span>Fast, uncluttered screens that each answer a question.</span></div>
-    <div class="tile"><b>Light agent</b><span>A small Rust agent whose footprint is measured on every change.</span></div>
+    <div class="tile"><b>Light agent</b><span>A small Rust agent with a strict footprint budget.</span></div>
     <div class="tile"><b>Quiet by default</b><span>Alerts on what matters; everything is tunable.</span></div>
     <div class="tile"><b>Yours to shape</b><span>Your own rules, collection, noise and views.</span></div>
     <div class="tile"><b>Your data stays yours</b><span>Self-hosted. No vendor cloud, no telemetry.</span></div>
@@ -100,7 +100,7 @@
 <section class="block" id="get-started"><div class="wrap">
   <div class="kicker">Get started</div>
   <h2>From nothing to your first findings</h2>
-  <ol class="steps">
+  <ol class="steps" role="list">
     <li class="step"><span class="n" aria-hidden="true">1</span><div><b>Install the platform</b> on a Fedora 44 host, as your own user:
       <pre><code>sudo sh -c "$(curl -fsSL https://openvibes-project.github.io/install.sh)"</code></pre></div></li>
     <li class="step"><span class="n" aria-hidden="true">2</span><div><b>Run Setup.</b> It opens by itself: enter the host name others will use, press Start, and write down the admin password it shows once.</div></li>

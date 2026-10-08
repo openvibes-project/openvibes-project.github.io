@@ -5,6 +5,9 @@
 # Usage: tests/check-site.sh [DIR]   (default: the repository root)
 set -euo pipefail
 DIR=${1:-$(cd "$(dirname "$0")/.." && pwd)}
+# Written into the site at publish time (scripts/releases.sh, build-repo.sh),
+# not in the repository: links to them are not checked here.
+SITE_GENERATED="releases.txt rpm"
 bad=0
 fail() { echo "FAIL: $*"; bad=1; }
 for page in "$DIR"/*.html; do
@@ -13,7 +16,9 @@ for page in "$DIR"/*.html; do
         case $ref in
             http://* | https://* | mailto:*) ;;
             '#'*) grep -q "id=\"${ref#\#}\"" "$page" || fail "$name: no id for $ref" ;;
-            *) [[ -e $DIR/${ref%%#*} ]] || fail "$name: $ref does not exist" ;;
+            *)
+                case " $SITE_GENERATED " in *" ${ref%%/*} "*) continue ;; esac
+                [[ -e $DIR/${ref%%#*} ]] || fail "$name: $ref does not exist" ;;
         esac
     done < <(grep -oE '(href|src)="[^"]*"' "$page" | sed -E 's/^(href|src)="(.*)"$/\2/')
 done

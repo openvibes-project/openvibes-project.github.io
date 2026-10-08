@@ -124,6 +124,9 @@ wait_for "the repository answers" 60 platform 'curl -fsS http://repo:8000/openvi
 # 1. The platform through the installer and Setup.
 out=$(in_c platform "$ENV sh /test/install.sh" 2>&1) || { echo "$out"; fail "install.sh (platform)"; }
 grep -q "setup --quick" <<<"$out" || { echo "$out"; fail "no next steps without a terminal"; }
+# Steps, not dnf's scriptlet output (install walkthrough, 2026-10-08).
+grep -q "installing openvibes-admin" <<<"$out" || { echo "$out"; fail "no install step shown"; }
+! grep -q '^>>> ' <<<"$out" || { echo "$out"; fail "dnf's scriptlet output reached the user"; }
 in_c platform 'command -v gpg >/dev/null' || fail "gnupg2 was not installed"
 in_c platform 'rpm -q --quiet openvibes-admin' || fail "openvibes-admin not installed"
 in_c platform 'openvibes-admin setup --quick --components ingest,distribution,vulns,rules --hostname platform --san 127.0.0.1' \
@@ -147,8 +150,18 @@ systemd_container agent
 in_c agent 'mkdir -p /etc/audit && printf -- "-D\n-a task,never\n" > /etc/audit/audit.rules'
 out=$(in_c agent "$ENV sh /test/install.sh $ARGS" 2>&1) || { echo "$out"; fail "install.sh --agent"; }
 grep -q "enrolled as agent\." <<<"$out" || { echo "$out"; fail "no 'enrolled as'"; }
+! grep -q '^>>> ' <<<"$out" || { echo "$out"; fail "dnf's scriptlet output reached the user (agent)"; }
 if [[ $ARGS == *--alarm-rules* ]]; then
-    grep -q "threat alarms can't fire" <<<"$out" || { echo "$out"; fail "no warning for -a task,never"; }
+    # An agent from agent #57 on ships its exec rule as a template and puts
+    # it in rules.d only on audit-fallback hosts: it still has alarms.
+    ! grep -q "has no threat alarms" <<<"$out" || { echo "$out"; fail "alarms refused for a current agent"; }
+    # The warning is for an agent reading kernel audit (its rule in
+    # rules.d); on an eBPF host (BTF, like this runner) it does not apply.
+    if in_c agent 'test -f /etc/audit/rules.d/openvibes-agent.rules'; then
+        grep -q "threat alarms can't fire" <<<"$out" || { echo "$out"; fail "no warning for -a task,never"; }
+    else
+        ! grep -q "threat alarms can't fire" <<<"$out" || { echo "$out"; fail "a task,never warning on an eBPF host"; }
+    fi
     in_c agent 'grep -q "^-a task,never" /etc/audit/audit.rules' || fail "install.sh changed the audit rules"
 fi
 wait_for "the platform lists the agent as active" 30 platform \

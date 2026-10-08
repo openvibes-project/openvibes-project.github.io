@@ -26,6 +26,17 @@ die() {
     exit 1
 }
 say() { printf 'openvibes install: %s\n' "$1"; }
+# install_package NAME: dnf installs it, its output kept in a log that is
+# shown only if it fails. dnf -q still prints every scriptlet's output
+# (">>> Running …"), which buried the next step (install walkthrough,
+# 2026-10-08).
+install_package() {
+    say "installing $1 (a minute or two)"
+    dnf install -y "$1" > "$tmp/dnf.log" 2>&1 || {
+        tail -n 25 "$tmp/dnf.log" >&2
+        die "dnf could not install $1"
+    }
+}
 
 usage() {
     cat >&2 <<'EOF'
@@ -155,7 +166,7 @@ dnf makecache -y -q --refresh --repo openvibes >/dev/null || die "could not load
 done_so_far="repository added"
 
 if [ "$mode" = platform ]; then
-    dnf install -y openvibes-admin || die "dnf could not install openvibes-admin"
+    install_package openvibes-admin
     done_so_far="openvibes-admin installed"
     user=${SUDO_USER:-}
     # Only when stdin is the terminal (sudo sh -c "$(curl ...)", the
@@ -186,7 +197,7 @@ ca=$(sed -n '/-----BEGIN CERTIFICATE-----/,/-----END CERTIFICATE-----/p' "$tmp/c
 curl -fsS --cacert "$tmp/ca.pem" --max-time 10 "$url/v1/ca" -o /dev/null ||
     die "the server at $url does not hold a certificate from that CA"
 
-dnf install -y openvibes-agent || die "dnf could not install openvibes-agent"
+install_package openvibes-agent
 done_so_far="openvibes-agent installed, not configured"
 platform_url=https://$host
 [ "$port" = 18423 ] || platform_url=$url
@@ -198,9 +209,13 @@ platform_ca_file = "$AGENT_DIR/platform-ca.crt"
 enrollment_token_file = "$AGENT_DIR/token"
 EOF
 # Threat alarms only for an agent that knows the collector: the P14 agent
-# package ships its exec audit rule; an older agent would refuse the name.
+# package ships its exec audit rule (in rules.d; from agent #57 on, as a
+# template in /usr/share, copied to rules.d only on audit-fallback hosts);
+# an older agent would refuse the name.
+audit_rule=/etc/audit/rules.d/openvibes-agent.rules
 alarms=''
-if [ -n "$alarm_rules" ] && [ ! -f /etc/audit/rules.d/openvibes-agent.rules ]; then
+if [ -n "$alarm_rules" ] && [ ! -f "$audit_rule" ] &&
+    [ ! -f /usr/share/openvibes-agent/openvibes-agent.rules ]; then
     say "this agent has no threat alarms (needs openvibes-agent 0.2 or later); --alarm-rules ignored"
 elif [ -n "$alarm_rules" ]; then
     alarms=yes
@@ -213,14 +228,15 @@ elif [ -n "$alarm_rules" ]; then
         services=', "services"'
     fi
     cat >> "$tmp/agent.toml" <<EOF
-# Threat alarms need auditd running (it loads the agent's exec rule).
+# Threat alarms: the agent's eBPF watcher, or kernel audit (auditd) as the fallback.
 collectors = ["processes", "packages", "ports", "process_events"$services]
 EOF
 fi
 # Fedora's default audit rules switch syscall auditing off for every task,
-# so the kernel reports no program starts and alarms could never fire. Say
-# so; never edit the host's audit rules (a system setting).
-if [ -n "$alarms" ] && grep -Eq '^-a[[:space:]]+(task,never|never,task)' /etc/audit/audit.rules 2>/dev/null; then
+# so an agent reading kernel audit (its rule in rules.d: an audit-fallback
+# host) sees no program starts. Say so; never edit the host's audit rules (a
+# system setting). An eBPF host's agent does not read audit.
+if [ -n "$alarms" ] && [ -f "$audit_rule" ] && grep -Eq '^-a[[:space:]]+(task,never|never,task)' /etc/audit/audit.rules 2>/dev/null; then
     say "warning: threat alarms can't fire on this host: /etc/audit/audit.rules has '-a task,never'"
     say "  fix: comment it out in /etc/audit/rules.d/audit.rules and run 'augenrules --load' (new logins and restarted services are watched; a reboot covers everything)"
 fi

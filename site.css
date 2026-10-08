@@ -28,8 +28,9 @@ a:focus-visible, .btn:focus-visible { outline: 3px solid var(--accent-text); out
 .nav a { color: var(--muted); text-decoration: none; }
 .nav a:hover { color: var(--strong); }
 .logo img { height: 30px; width: auto; display: block; }
-.wm-light { display: none; }
-@media (prefers-color-scheme: light) { .wm-dark { display: none; } .wm-light { display: block; } }
+/* As specific as `.logo img`, which would otherwise show both. */
+.logo .wm-light { display: none; }
+@media (prefers-color-scheme: light) { .logo .wm-dark { display: none; } .logo .wm-light { display: block; } }
 .pill { display: inline-block; font-size: 13px; padding: 2px 11px; border-radius: 999px; background: var(--pill-bg); color: var(--pill-fg); border: 1px solid var(--pill-line); margin-bottom: 14px; }
 h1 { font-size: clamp(32px, 5vw, 46px); line-height: 1.1; margin: 0 0 14px; color: var(--strong); max-width: 22ch; letter-spacing: -.01em; }
 .lead { font-size: 18.5px; color: var(--muted); max-width: 58ch; margin: 0 0 24px; }

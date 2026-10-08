@@ -25,6 +25,7 @@ printf '%s' "$RPM_SIGNING_KEY" | gpg --batch --quiet --import
 printf '%s' "$RPM_SIGNING_PASSPHRASE" > "$T/pass"; chmod 0600 "$T/pass"
 gpg --batch --yes --pinentry-mode loopback --passphrase-file "$T/pass" \
     --detach-sign --armor --output "$repo/repodata/repomd.xml.asc" "$repo/repodata/repomd.xml"
-cp install.sh "$pubkey" openvibes.repo index.html "$site/"
+cp install.sh "$pubkey" openvibes.repo index.html packages.html site.css "$site/"
+cp -r assets "$site/"
 [[ $pubkey == openvibes.gpg ]] || cp "$pubkey" "$site/openvibes.gpg"
 echo "build-repo: ${#rpms[@]} packages in $repo"

@@ -20,7 +20,8 @@ package() { # NAME DIR
 }
 site() { # DIR: a copy of this repository's site sources with the test key
     mkdir -p "$1"
-    cp "$ROOT/openvibes.repo" "$ROOT/index.html" "$1/"
+    cp "$ROOT/openvibes.repo" "$ROOT/index.html" "$ROOT/packages.html" "$ROOT/site.css" "$1/"
+    cp -r "$ROOT/assets" "$1/"
     sed "s/^KEY_FINGERPRINT=.*/KEY_FINGERPRINT=$fpr/" "$ROOT/install.sh" > "$1/install.sh"
     cp "$T/key.pub" "$1/openvibes.gpg"
 }
@@ -35,7 +36,7 @@ test -s "$T/site1/$repo/repodata/repomd.xml.asc" || { echo "FAIL: no repomd.xml.
 gpg --batch --import "$T/key.pub" 2>/dev/null
 gpg --batch --verify "$T/site1/$repo/repodata/repomd.xml.asc" "$T/site1/$repo/repodata/repomd.xml" 2>/dev/null ||
     { echo "FAIL: repomd.xml signature does not verify"; exit 1; }
-for f in install.sh openvibes.gpg openvibes.repo index.html; do test -s "$T/site1/$f" || { echo "FAIL: $f missing"; exit 1; }; done
+for f in install.sh openvibes.gpg openvibes.repo index.html packages.html site.css assets/wordmark-dark.svg; do test -s "$T/site1/$f" || { echo "FAIL: $f missing"; exit 1; }; done
 
 # One unsigned package: refused.
 site "$T/src2"; package three "$T/site2/$repo"

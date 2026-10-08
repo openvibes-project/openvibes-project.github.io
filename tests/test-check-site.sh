@@ -8,13 +8,17 @@ CHECK=$ROOT/tests/check-site.sh
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 fail() { echo "FAIL: $*"; exit 1; }
 # site NAME HTML: a site with one page, index.html.
-site() { mkdir -p "$T/$1"; printf '%s\n' "$2" > "$T/$1/index.html"; }
+site() {
+    local name=$1 html=$2
+    mkdir -p "$T/$name"
+    printf '%s\n' "$html" > "$T/$name/index.html"
+}
 # expect NAME MESSAGE: the check fails on that site and says MESSAGE.
 expect() {
-    local out
-    if out=$(bash "$CHECK" "$T/$1"); then fail "$1: passed"; fi
-    grep -qF -- "$2" <<<"$out" || fail "$1: no '$2' in: $out"
-    echo "ok $1"
+    local name=$1 message=$2 out
+    if out=$(bash "$CHECK" "$T/$name"); then fail "$name: passed"; fi
+    grep -qF -- "$message" <<<"$out" || fail "$name: no '$message' in: $out"
+    echo "ok $name"
 }
 
 bash "$CHECK" "$ROOT/tests/fixtures/site-ok" >/dev/null || fail "the good fixture failed"

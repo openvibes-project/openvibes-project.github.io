@@ -13,16 +13,20 @@ SITE_GENERATED="releases.txt rpm"
 bad=0
 fail() { echo "FAIL: $*"; bad=1; }
 # has_id FILE ID: FILE has an element with exactly that id (not data-id=).
-has_id() { grep -qE "[[:space:]]id=\"$2\"" "$1"; }
+has_id() {
+    local file=$1 id=$2
+    grep -qE "[[:space:]]id=\"$id\"" "$file"
+}
 # refs FILE: the local references in FILE, one per line.
 refs() {
-    case $1 in
+    local file=$1
+    case $file in
         *.css)
-            { grep -oE 'url\([^)]*\)' "$1" || true; } | sed -E "s/^url\\([\"']?//; s/[\"']?\\)\$//" | { grep -v '^data:' || true; } ;;
+            { grep -oE 'url\([^)]*\)' "$file" || true; } | sed -E "s/^url\\([\"']?//; s/[\"']?\\)\$//" | { grep -v '^data:' || true; } ;;
         *)
-            { grep -oiE "(href|src)[[:space:]]*=[[:space:]]*(\"[^\"]*\"|'[^']*')" "$1" || true; } |
+            { grep -oiE "(href|src)[[:space:]]*=[[:space:]]*(\"[^\"]*\"|'[^']*')" "$file" || true; } |
                 sed -E "s/^[^=]*=[[:space:]]*[\"']//; s/[\"']\$//"
-            { grep -oiE "srcset[[:space:]]*=[[:space:]]*(\"[^\"]*\"|'[^']*')" "$1" || true; } |
+            { grep -oiE "srcset[[:space:]]*=[[:space:]]*(\"[^\"]*\"|'[^']*')" "$file" || true; } |
                 sed -E "s/^[^=]*=[[:space:]]*[\"']//; s/[\"']\$//" | tr ',' '\n' | awk 'NF {print $1}' ;;
     esac
 }

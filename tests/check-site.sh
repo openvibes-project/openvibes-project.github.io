@@ -2,6 +2,8 @@
 # Checks the site's pages: every local link and asset exists, every
 # in-page anchor has its target, and the images stay under 1 MB (the site
 # is already over GitHub Pages' size soft limit; website spec §5).
+# Looks at href/src (either quote, any case), every srcset candidate, and
+# url() in the stylesheets.
 # Usage: tests/check-site.sh [DIR]   (default: the repository root)
 set -euo pipefail
 DIR=${1:-$(cd "$(dirname "$0")/.." && pwd)}
@@ -12,12 +14,25 @@ bad=0
 fail() { echo "FAIL: $*"; bad=1; }
 # has_id FILE ID: FILE has an element with exactly that id (not data-id=).
 has_id() { grep -qE "[[:space:]]id=\"$2\"" "$1"; }
-for page in "$DIR"/*.html; do
-    name=$(basename "$page")
+# refs FILE: the local references in FILE, one per line.
+refs() {
+    case $1 in
+        *.css)
+            { grep -oE 'url\([^)]*\)' "$1" || true; } | sed -E "s/^url\\([\"']?//; s/[\"']?\\)\$//" | { grep -v '^data:' || true; } ;;
+        *)
+            { grep -oiE "(href|src)[[:space:]]*=[[:space:]]*(\"[^\"]*\"|'[^']*')" "$1" || true; } |
+                sed -E "s/^[^=]*=[[:space:]]*[\"']//; s/[\"']\$//"
+            { grep -oiE "srcset[[:space:]]*=[[:space:]]*(\"[^\"]*\"|'[^']*')" "$1" || true; } |
+                sed -E "s/^[^=]*=[[:space:]]*[\"']//; s/[\"']\$//" | tr ',' '\n' | awk 'NF {print $1}' ;;
+    esac
+}
+for file in "$DIR"/*.html "$DIR"/*.css; do
+    [[ -e $file ]] || continue
+    name=$(basename "$file")
     while read -r ref; do
         case $ref in
             http://* | https://* | mailto:*) ;;
-            '#'*) has_id "$page" "${ref#\#}" || fail "$name: no id for $ref" ;;
+            '#'*) has_id "$file" "${ref#\#}" || fail "$name: no id for $ref" ;;
             *)
                 case " $SITE_GENERATED " in *" ${ref%%/*} "*) continue ;; esac
                 path=${ref%%#*}
@@ -28,7 +43,7 @@ for page in "$DIR"/*.html; do
                     has_id "$DIR/$path" "${ref#*#}" || fail "$name: no id for $ref"
                 fi ;;
         esac
-    done < <(grep -oE '(href|src)="[^"]*"' "$page" | sed -E 's/^(href|src)="(.*)"$/\2/')
+    done < <(refs "$file")
 done
 size=0
 if [[ -d $DIR/assets ]]; then

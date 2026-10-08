@@ -35,6 +35,17 @@ site big '<p></p>'
 mkdir -p "$T/big/assets"; truncate -s 1100K "$T/big/assets/huge.webp"
 expect big "over 1 MB"
 
+site quoted "<link rel='stylesheet' HREF='gone.css'>"
+expect quoted "index.html: gone.css does not exist"
+
+site srcset '<img src="a.svg" srcset="assets/a-2x.webp 2x, assets/a-3x.webp 3x" alt="">'
+mkdir -p "$T/srcset/assets"; : > "$T/srcset/a.svg"; : > "$T/srcset/assets/a-2x.webp"
+expect srcset "index.html: assets/a-3x.webp does not exist"
+
+site cssurl '<link rel="stylesheet" href="site.css">'
+printf '%s\n' 'body { background: url("assets/missing.svg"); }' > "$T/cssurl/site.css"
+expect cssurl "site.css: assets/missing.svg does not exist"
+
 # Files the publish step writes are not looked for.
 site generated '<a href="releases.txt">r</a><a href="rpm/fedora/44/x86_64/">p</a>'
 bash "$CHECK" "$T/generated" >/dev/null || fail "generated files were looked for"

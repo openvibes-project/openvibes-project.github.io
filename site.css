@@ -22,6 +22,7 @@ body { margin: 0; background: var(--canvas); color: var(--text); font: 16px/1.6 
 a { color: var(--accent-text); }
 a:focus-visible, .btn:focus-visible { outline: 3px solid var(--accent-text); outline-offset: 3px; }
 .wrap { max-width: 1060px; margin: 0 auto; padding: 0 24px; }
+.page-head { padding-top: 22px; }
 .hero { background: radial-gradient(1100px 420px at 75% -12%, var(--glow) 0%, var(--canvas) 58%); padding-top: 22px; }
 .nav { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 46px; font-size: 15px; }
 .nav ul { display: flex; flex-wrap: wrap; gap: 6px 20px; list-style: none; margin: 0; padding: 0; }
@@ -58,7 +59,7 @@ h2 { font-size: 29px; color: var(--strong); margin: 0 0 8px; }
 .shot { border: 1px solid var(--line-2); border-radius: 10px; overflow: hidden; box-shadow: 0 12px 40px var(--shadow); }
 .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 22px; }
 .tile, .box { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; }
-.tile b, .box h3 { color: var(--strong); display: block; margin: 0 0 4px; font-size: 16px; }
+.tile h3, .box h3 { color: var(--strong); display: block; margin: 0 0 4px; font-size: 16px; }
 .tile span { color: var(--muted); font-size: 15px; }
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 20px; }
 .box li { color: var(--muted); font-size: 15px; margin: 4px 0; }

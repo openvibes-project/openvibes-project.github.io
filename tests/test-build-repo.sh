@@ -19,10 +19,12 @@ package() { # NAME DIR
     mkdir -p "$2"; cp "$T/build/$1"/RPMS/noarch/*.rpm "$2/"
 }
 site() { # DIR: a copy of this repository's site sources with the test key
-    mkdir -p "$1"
-    cp "$ROOT/openvibes.repo" "$ROOT/index.html" "$1/"
-    sed "s/^KEY_FINGERPRINT=.*/KEY_FINGERPRINT=$fpr/" "$ROOT/install.sh" > "$1/install.sh"
-    cp "$T/key.pub" "$1/openvibes.gpg"
+    local dir=$1
+    mkdir -p "$dir"
+    cp "$ROOT/openvibes.repo" "$ROOT/index.html" "$ROOT/packages.html" "$ROOT/site.css" "$dir/"
+    cp -r "$ROOT/assets" "$dir/"
+    sed "s/^KEY_FINGERPRINT=.*/KEY_FINGERPRINT=$fpr/" "$ROOT/install.sh" > "$dir/install.sh"
+    cp "$T/key.pub" "$dir/openvibes.gpg"
 }
 export RPM_SIGNING_KEY=$KEY RPM_SIGNING_PASSPHRASE=pw
 repo=rpm/fedora/44/x86_64
@@ -35,7 +37,7 @@ test -s "$T/site1/$repo/repodata/repomd.xml.asc" || { echo "FAIL: no repomd.xml.
 gpg --batch --import "$T/key.pub" 2>/dev/null
 gpg --batch --verify "$T/site1/$repo/repodata/repomd.xml.asc" "$T/site1/$repo/repodata/repomd.xml" 2>/dev/null ||
     { echo "FAIL: repomd.xml signature does not verify"; exit 1; }
-for f in install.sh openvibes.gpg openvibes.repo index.html; do test -s "$T/site1/$f" || { echo "FAIL: $f missing"; exit 1; }; done
+for f in install.sh openvibes.gpg openvibes.repo index.html packages.html site.css assets/wordmark-dark.svg; do [[ -s $T/site1/$f ]] || { echo "FAIL: $f missing"; exit 1; }; done
 
 # One unsigned package: refused.
 site "$T/src2"; package three "$T/site2/$repo"

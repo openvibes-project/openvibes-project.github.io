@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Packages and signing key · OpenVIBES</title>
+<meta name="description" content="OpenVIBES packages: the installer, the signed Fedora 44 package repository and its signing key with fingerprint.">
+<meta name="color-scheme" content="dark light">
+<link rel="canonical" href="https://openvibes-project.github.io/packages.html">
+<link rel="icon" href="assets/mark.svg" type="image/svg+xml">
+<link rel="icon" href="assets/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="assets/mark-192.png">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<header class="wrap page-head">
+  <nav class="nav" aria-label="Main">
+    <a class="logo" href="./"><img class="wm-dark" src="assets/wordmark-dark.svg" alt="OpenVIBES" width="166" height="30"><img class="wm-light" src="assets/wordmark-light.svg" alt="OpenVIBES" width="166" height="30"></a>
+    <ul><li><a href="./">Home</a></li><li><a href="./#get-started">Get started</a></li><li><a href="https://github.com/openvibes-project">GitHub</a></li></ul>
+  </nav>
+  <h1>Packages and signing key</h1>
+  <p class="lead">Signed Fedora 44 packages and the installer for OpenVIBES.</p>
+</header>
+<main class="wrap compact">
+<section class="block">
+  <h2>Install the platform</h2>
+  <pre><code>sudo sh -c "$(curl -fsSL https://openvibes-project.github.io/install.sh)"</code></pre>
+  <p>It adds this repository, installs the administration tool and opens its Setup. No output at all means the download failed: check your connection and run it again. Safer: download <a href="install.sh">install.sh</a>, read it, then run <code>sudo sh install.sh</code>.</p>
+</section>
+<section class="block">
+  <h2>Add an agent</h2>
+  <p>In the console: Enrollment → Add a host, then Copy CLI install or Install package. On the platform host, <code>sudo openvibes-admin agent command</code> prints the same command.</p>
+</section>
+<section class="block">
+  <h2>The repository</h2>
+  <p><a href="openvibes.repo">openvibes.repo</a> for dnf (Fedora 44, x86_64); the installer adds it for you. Released versions: <a href="releases.txt">releases.txt</a>.</p>
+</section>
+<section class="block">
+  <h2>The package key</h2>
+  <p><a href="openvibes.gpg">openvibes.gpg</a>, fingerprint</p>
+  <pre><code>710A D8AF B7AF E6E8 64C0 CDC4 E134 BAF3 7786 DA36</code></pre>
+  <p>Check it with <code>gpg --show-keys openvibes.gpg</code>. The installer refuses a key with another fingerprint.</p>
+</section>
+</main>
+<div class="wrap"><footer class="foot"><span>OpenVIBES · MIT licence · no telemetry</span><ul><li><a href="./">Home</a></li><li><a href="https://github.com/openvibes-project">GitHub</a></li></ul></footer></div>
+</body>
+</html>

@@ -117,6 +117,11 @@ Today's reference content, in the same style: the repository (Fedora 44,
   alt text. Total images under 1 MB: the site is already over GitHub Pages'
   1 GB soft limit because of the model packages (`status.md` follow-up), so
   the page adds as little as possible.
+- **Publishing gate (user, 2026-10-08):** a new dashboard is on its way
+  (another session's work). The screenshots, the hero's dashboard above
+  all, are taken only after it is in the live demo; the page is not
+  published before. The page may be built and reviewed with today's
+  screenshots as stand-ins, replaced before the publishing PR merges.
 - The version in the badge is written by hand when a release is cut
   (a line in the release checklist), not fetched at run time.
 

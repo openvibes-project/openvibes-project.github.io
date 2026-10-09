@@ -368,7 +368,10 @@ elif [ -n "$alarm_rules" ]; then
     # file list, so a nodocs install counts too). An older agent would
     # refuse the name; without this list its own default applies.
     services=''
-    if package_files openvibes-agent 2>/dev/null | grep -q '/owners\.conf$'; then
+    # Two markers: the owners.conf drop-in (P15 agents up to 0.2.5) and the
+    # root-facts helper that replaced it (decisions.md 2026-10-09).
+    if package_files openvibes-agent 2>/dev/null |
+        grep -qE '/owners\.conf$|^/usr/libexec/openvibes-agent/openvibes-agent-facts$'; then
         services=', "services"'
     fi
     cat >> "$tmp/agent.toml" <<EOF

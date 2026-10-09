@@ -181,8 +181,9 @@ wait_for "the agent accepted the baseline rule set" 180 platform \
 ok "the enrolled agent fetched and accepted the baseline rule set"
 # Threat alarms (P14): the collector is on, both rule sets are configured,
 # and the agent accepted the alarm rules too.
-# A P15 agent (its package lists owners.conf) also gets "services".
-in_c agent 'rpm -ql openvibes-agent | grep -q /owners.conf$ || exit 0; grep -q "^collectors = .*\"services\"" /etc/openvibes-agent/agent.toml' ||
+# A P15 agent (its package lists owners.conf, or the root-facts helper that
+# replaced it) also gets "services".
+in_c agent 'rpm -ql openvibes-agent | grep -qE "/owners.conf$|/openvibes-agent-facts$" || exit 0; grep -q "^collectors = .*\"services\"" /etc/openvibes-agent/agent.toml' ||
     { in_c agent 'cat /etc/openvibes-agent/agent.toml'; fail "a P15 agent did not get the services collector"; }
 in_c agent 'grep -q "^collectors = .*\"process_events\"" /etc/openvibes-agent/agent.toml' ||
     { in_c agent 'cat /etc/openvibes-agent/agent.toml'; fail "agent.toml does not turn process_events on"; }
@@ -216,7 +217,8 @@ for system in debian=docker.io/library/debian:12 ubuntu=docker.io/library/ubuntu
     out=$(in_c "$name" "$ENV sh /test/install.sh ${line#*sh -s -- }" 2>&1) || { echo "$out"; fail "install.sh --agent on $base"; }
     id=$(sed -n 's/.*enrolled as \(agent\.[0-9a-f-]*\).*/\1/p' <<<"$out")
     [[ -n $id ]] || { echo "$out"; fail "no 'enrolled as' on $base"; }
-    # The package lists owners.conf on every format, so the services collector is on.
+    # The package lists owners.conf (or the root-facts helper) on every format,
+    # so the services collector is on.
     in_c "$name" 'grep -q "^collectors = .*\"services\"" /etc/openvibes-agent/agent.toml' ||
         { in_c "$name" 'cat /etc/openvibes-agent/agent.toml'; fail "$base: no services collector"; }
     wait_for "$base: the agent accepted the baseline rule set" 180 platform \

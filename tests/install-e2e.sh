@@ -8,16 +8,21 @@
 #      through its --rules and --alarm-rules, the agent gets the threat
 #      alarm collector (process_events) and fetches and accepts both the
 #      baseline and the baseline alarm rules (P14);
+#   2a. the same line enrolls agents on Debian 12, Ubuntu 22.04, Arch and
+#      AlmaLinux 9 from the test apt, pacman and dnf repositories, and each
+#      accepts the baseline rule set;
 #   2b. a Repair moves distribution (--move-agent-ports); an agent from the
 #      new line (--distribution-port) accepts the baseline there;
 #   3. refusals, each leaving no agent package behind: a wrong package-key
 #      fingerprint, a wrong CA fingerprint, a server whose certificate is
-#      not from the CA it serves, Fedora 43 and Debian, and an agent that
-#      is already configured (its agent.toml unchanged).
-# Usage: tests/install-e2e.sh RPM_DIR
-#   RPM_DIR  openvibes-{ingest,distribution,vulns,admin}-*.rpm, one
-#            openvibes-agent-*.rpm and openvibes-rules-baseline-*.noarch.rpm
-#            (debuginfo and other files are ignored)
+#      not from the CA it serves, Fedora 43 and Debian 11 agents, the
+#      platform on Debian 12, and an agent that is already configured (its
+#      agent.toml unchanged).
+# Usage: tests/install-e2e.sh PKG_DIR
+#   PKG_DIR  openvibes-{ingest,distribution,vulns,admin}-*.rpm, one
+#            openvibes-agent-*.rpm, one openvibes-agent_*_amd64.deb, one
+#            openvibes-agent-*-x86_64.pkg.tar.zst and
+#            openvibes-rules-baseline-*.noarch.rpm (other files are ignored)
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 PODMAN=${PODMAN:-podman}
@@ -28,7 +33,7 @@ IMAGE=ov-install-e2e:44
 fail() { echo "FAIL: $*" >&2; exit 1; }
 ok() { echo "ok: $*"; }
 in_c() { "$PODMAN" exec "$1" bash -c "$2"; }
-names=(repo platform agent agent2 agent3 platform2 f43 debian)
+names=(repo platform agent agent2 agent3 platform2 f43 debian11 debplatform agent-debian agent-ubuntu agent-arch agent-alma)
 cleanup() {
     local status=$?
     if ((status != 0)); then
@@ -63,31 +68,33 @@ wait_for() { # DESC SECONDS CONTAINER COMMAND
     fail "$1 (after $2 s)"
 }
 
-# The repository: every RPM signed with a throwaway key, indexed, the
-# metadata signed; install.sh and the public key beside it.
-rm -rf "$W"; mkdir -p "$W/repo/rpm/fedora/44/x86_64"
+# The repository: every package signed with a throwaway key (RPMs inside,
+# the .deb and Arch package by a detached .sig) and published by the real
+# scripts/build-repo.sh: dnf, apt and pacman repositories, metadata signed.
+rm -rf "$W"; mkdir -p "$W/repo/rpm/fedora/44/x86_64" "$W/repo/deb" "$W/repo/arch/x86_64"
 for f in "$1"/openvibes-{ingest,distribution,vulns,admin,agent}-[0-9]*.x86_64.rpm \
     "$1"/openvibes-rules-baseline-[0-9]*.noarch.rpm; do
     cp "$f" "$W/repo/rpm/fedora/44/x86_64/"
 done
-cp "$ROOT/install.sh" "$ROOT/scripts/sign-rpms.sh" "$W/"
+cp "$1"/openvibes-agent_*_amd64.deb "$W/repo/deb/"
+cp "$1"/openvibes-agent-[0-9]*-x86_64.pkg.tar.zst "$W/repo/arch/x86_64/"
+cp "$ROOT/install.sh" "$W/"
 # shellcheck disable=SC2016  # expands inside the container
-"$PODMAN" run --rm -v "$W:/w:z" registry.fedoraproject.org/fedora:44 bash -c '
+"$PODMAN" run --rm -v "$W:/w:z" -v "$ROOT:/src:ro,z" -w /src registry.fedoraproject.org/fedora:44 bash -c '
     set -e
-    dnf -q -y install rpm-build rpm-sign gnupg2 createrepo_c >/dev/null 2>&1
+    dnf -q -y install rpm-build rpm-sign gnupg2 createrepo_c dpkg-dev pacman bsdtar zstd >/dev/null 2>&1
     export GNUPGHOME=/tmp/g; mkdir -m 0700 $GNUPGHOME
     gpg --batch --pinentry-mode loopback --passphrase pw --quick-gen-key "test <t@example.invalid>" rsa2048 sign 1d 2>/dev/null
     fpr=$(gpg --with-colons --list-secret-keys | awk -F: "\$1==\"fpr\"{print \$10; exit}")
-    gpg --armor --export "$fpr" > /w/repo/openvibes.gpg
+    gpg --armor --export "$fpr" > /w/openvibes.gpg
     echo "$fpr" > /w/fpr
     export RPM_SIGNING_KEY=$(gpg --batch --pinentry-mode loopback --passphrase pw --armor --export-secret-keys "$fpr")
     export RPM_SIGNING_PASSPHRASE=pw
-    bash /w/sign-rpms.sh /w/repo/rpm/fedora/44/x86_64 /w/repo/openvibes.gpg
-    createrepo_c --quiet /w/repo/rpm/fedora/44/x86_64
-    printf pw > /tmp/pass
-    gpg --batch --yes --pinentry-mode loopback --passphrase-file /tmp/pass --detach-sign --armor \
-        /w/repo/rpm/fedora/44/x86_64/repodata/repomd.xml
-    cp /w/install.sh /w/repo/install.sh' >/dev/null || fail "sign the test repository"
+    bash scripts/sign-rpms.sh /w/repo/rpm/fedora/44/x86_64 /w/openvibes.gpg
+    for p in /w/repo/deb/*.deb /w/repo/arch/x86_64/*.pkg.tar.zst; do
+        gpg --batch --pinentry-mode loopback --passphrase pw --detach-sign --output "$p.sig" "$p"
+    done
+    bash scripts/build-repo.sh /w/repo /w/openvibes.gpg' >/dev/null || fail "sign and publish the test repository"
 FPR=$(cat "$W/fpr")
 ENV="OPENVIBES_SITE=http://repo:8000 OPENVIBES_KEY_FINGERPRINT=$FPR"
 ok "test repository signed ($FPR)"
@@ -112,9 +119,9 @@ known() { # NAME: later containers can reach it by name
 "$PODMAN" run -d --name repo --network "$NET" -v "$W/repo:/srv:z" -w /srv \
     "$IMAGE" python3 -m http.server 8000 >/dev/null
 known repo
-systemd_container() { # NAME
+systemd_container() { # NAME [IMAGE INIT]
     "$PODMAN" run -d --name "$1" --hostname "$1" --network "$NET" "${HOSTS[@]}" --systemd=always --privileged \
-        -v "$W:/test:z" "$IMAGE" /sbin/init >/dev/null
+        -v "$W:/test:z" "${2:-$IMAGE}" "${3:-/sbin/init}" >/dev/null
     wait_for "$1 is up" 60 "$1" 'systemctl is-system-running | grep -qE "running|degraded"'
 }
 systemd_container platform
@@ -185,6 +192,36 @@ wait_for "the agent accepted the baseline alarm rule set" 180 platform \
     "runuser -u openvibes-admin -- openvibes-admin agent show $AGENT_ID | grep -q '^rule set baseline-alarms version [0-9]'"
 ok "the enrolled agent has process_events and accepted the baseline alarm rule set"
 
+# 2a. The same kind of line on the other supported systems, each from its
+# own repository (apt, pacman, dnf on EL); gnupg is left out of the Debian
+# and Ubuntu images so the installer's own install of it runs.
+other_image() { # BASE PREP: BASE with systemd and PREP, our MAC policy, printed as a tag
+    local tag=${1##*/}
+    tag=ov-install-e2e-${tag//[^a-z0-9]/-}
+    printf 'FROM %s\nRUN %s\nRUN mkdir -p /etc/systemd/network && printf "[Match]\\nOriginalName=*\\n[Link]\\nMACAddressPolicy=none\\n" > /etc/systemd/network/99-default.link\n' \
+        "$1" "$2" | "$PODMAN" build -q -t "$tag" -f - "$W" >/dev/null || fail "image $1"
+    echo "$tag"
+}
+apt_prep='apt-get update -q && DEBIAN_FRONTEND=noninteractive apt-get install -y -q systemd dbus curl ca-certificates procps && apt-get clean'
+for system in debian=docker.io/library/debian:12 ubuntu=docker.io/library/ubuntu:22.04 \
+    arch=docker.io/library/archlinux:latest alma=docker.io/library/almalinux:9; do
+    name=agent-${system%%=*} base=${system#*=}
+    case ${system%%=*} in
+        debian | ubuntu) prep=$apt_prep ;;
+        arch) prep='pacman -Syu --noconfirm --needed procps-ng && pacman-key --init && pacman-key --populate archlinux' ;;
+        alma) prep='dnf -q -y install systemd procps-ng && dnf clean all' ;;
+    esac
+    systemd_container "$name" "$(other_image "$base" "$prep")" /usr/lib/systemd/systemd
+    line=$(in_c platform 'runuser -u openvibes-admin -- openvibes-admin agent command --platform platform' | head -1)
+    out=$(in_c "$name" "$ENV sh /test/install.sh ${line#*sh -s -- }" 2>&1) || { echo "$out"; fail "install.sh --agent on $base"; }
+    id=$(sed -n 's/.*enrolled as \(agent\.[0-9a-f-]*\).*/\1/p' <<<"$out")
+    [[ -n $id ]] || { echo "$out"; fail "no 'enrolled as' on $base"; }
+    wait_for "$base: the agent accepted the baseline rule set" 180 platform \
+        "runuser -u openvibes-admin -- openvibes-admin agent show $id | grep -q '^rule set baseline version [0-9]'"
+    ok "$base: agent installed from its repository and enrolled"
+    "$PODMAN" rm -f "$name" >/dev/null   # one at a time: memory
+done
+
 # 2b. Distribution moved (platform #92, board #62): a Repair moves it only
 # with --move-agent-ports and says what that means for enrolled agents; the
 # new agent line carries the port, and an agent from it gets the rules there.
@@ -253,12 +290,19 @@ refused "a wrong CA fingerprint" "the platform's CA has fingerprint" agent2 \
 wait_for "the foreign server answers" 60 agent2 'curl -ksf https://platform2:18423/v1/ca -o /dev/null'
 refused "a server whose certificate is not from that CA" "does not hold a certificate from that CA" agent2 \
     "$ENV sh /test/install.sh --agent --platform platform2 --token $TOKEN --ca-sha256 $FP"
-for image in registry.fedoraproject.org/fedora:43 docker.io/library/debian:stable; do
-    name=$([[ $image == *fedora* ]] && echo f43 || echo debian)
+# Systems with no agent package, and the platform anywhere but Fedora 44.
+for case in "f43 registry.fedoraproject.org/fedora:43 agent" "debian11 docker.io/library/debian:11 agent" \
+    "debplatform docker.io/library/debian:12 platform"; do
+    read -r name image what <<<"$case"
     "$PODMAN" run -d --name "$name" --network "$NET" -v "$W:/test:z" "$image" sleep infinity >/dev/null
-    if in_c "$name" "$ENV sh /test/install.sh $ARGS" >"$W/$name.out" 2>&1; then fail "$image: accepted"; fi
-    grep -q "Fedora 44 on x86_64" "$W/$name.out" || { cat "$W/$name.out"; fail "$image: wrong refusal"; }
-    ok "$image: refused"
+    if [[ $what == agent ]]; then
+        args=$ARGS want="OpenVIBES agent packages are for Fedora 44, AlmaLinux and Rocky 9+"
+    else
+        args="" want="the OpenVIBES platform is for Fedora 44"
+    fi
+    if in_c "$name" "$ENV sh /test/install.sh $args" >"$W/$name.out" 2>&1; then fail "$image ($what): accepted"; fi
+    grep -qF "$want" "$W/$name.out" || { cat "$W/$name.out"; fail "$image ($what): wrong refusal"; }
+    ok "$image ($what): refused"
 done
 before=$(in_c agent 'sha256sum /etc/openvibes-agent/agent.toml')
 if out=$(in_c agent "$ENV sh /test/install.sh $ARGS" 2>&1); then fail "a configured agent was overwritten"; fi

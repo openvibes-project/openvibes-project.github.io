@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Packages and signing key · OpenVIBES</title>
-<meta name="description" content="OpenVIBES packages: the installer, the signed Fedora 44 package repository and its signing key with fingerprint.">
+<meta name="description" content="OpenVIBES packages: the installer, the signed dnf, apt and pacman repositories and their signing key with fingerprint.">
 <meta name="color-scheme" content="dark light">
 <link rel="canonical" href="https://openvibes-project.github.io/packages.html">
 <link rel="icon" href="assets/mark.svg" type="image/svg+xml">
@@ -32,8 +32,17 @@
   <p>In the console: Enrollment → Add a host, then Copy CLI install or Install package. On the platform host, <code>sudo openvibes-admin agent command</code> prints the same command.</p>
 </section>
 <section class="block">
-  <h2>The repository</h2>
-  <p><a href="openvibes.repo">openvibes.repo</a> for dnf (Fedora 44, x86_64); the installer adds it for you. Released versions: <a href="releases.txt">releases.txt</a>.</p>
+  <h2>The repositories</h2>
+  <p>The installer adds the right one for you; all are x86_64 and signed with the key below. Released versions: <a href="releases.txt">releases.txt</a>.</p>
+  <ul>
+    <li><b>dnf</b> (Fedora 44; AlmaLinux and Rocky Linux 9+, agent only): <a href="openvibes.repo">openvibes.repo</a> in <code>/etc/yum.repos.d/</code>. On AlmaLinux and Rocky, the installer points it at the Fedora 44 folder: the agent package is the same file.</li>
+    <li><b>apt</b> (Debian 12+, Ubuntu 22.04+, agent only): the key as <code>/etc/apt/keyrings/openvibes.asc</code>, and in <code>/etc/apt/sources.list.d/openvibes.list</code>:
+      <pre><code>deb [signed-by=/etc/apt/keyrings/openvibes.asc] https://openvibes-project.github.io/deb ./</code></pre></li>
+    <li><b>pacman</b> (Arch, agent only): the key added with <code>pacman-key --add openvibes.gpg</code> and <code>pacman-key --lsign-key</code> (fingerprint below), and in <code>/etc/pacman.conf</code>:
+      <pre><code>[openvibes]
+SigLevel = Required DatabaseRequired
+Server = https://openvibes-project.github.io/arch/$arch</code></pre></li>
+  </ul>
 </section>
 <section class="block">
   <h2>The package key</h2>

@@ -39,18 +39,24 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: The latest RPMs from main of the code and rules repositories
+      - name: The latest packages from main of the code and rules repositories
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           latest() { gh run list -R "openvibes-project/$1" --workflow CI --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId'; }
           gh run download "$(latest openvibes-platform)" -R openvibes-project/openvibes-platform -n rpms -D rpms/platform
-          gh run download "$(latest openvibes-agent)" -R openvibes-project/openvibes-agent -n agent-rpms -D rpms/agent
+          agent_run=$(latest openvibes-agent)
+          gh run download "$agent_run" -R openvibes-project/openvibes-agent -n agent-rpms -D rpms/agent
+          gh run download "$agent_run" -R openvibes-project/openvibes-agent -n agent-debs -D rpms/agent
+          gh run download "$agent_run" -R openvibes-project/openvibes-agent -n agent-arch -D rpms/agent
           gh run download "$(latest openvibes-rules)" -R openvibes-project/openvibes-rules -n rules-rpms -D rpms/rules
           mkdir rpms/all
           cp rpms/platform/openvibes-{ingest,distribution,vulns,admin}-[0-9]*.x86_64.rpm rpms/all/
+          # The lowest version of each: CI also builds a next-patch test package.
           cp "$(ls -v rpms/agent/openvibes-agent-[0-9]*.x86_64.rpm | head -1)" rpms/all/
+          cp "$(ls -v rpms/agent/openvibes-agent_*_amd64.deb | head -1)" rpms/all/
+          cp "$(ls -v rpms/agent/openvibes-agent-[0-9]*-x86_64.pkg.tar.zst | head -1)" rpms/all/
           cp rpms/rules/openvibes-rules-baseline-[0-9]*.noarch.rpm rpms/all/
           ls rpms/all
-      - name: Install the platform, enroll an agent, check the refusals
+      - name: Install the platform, enroll agents on every supported system, check the refusals
         run: bash tests/install-e2e.sh rpms/all

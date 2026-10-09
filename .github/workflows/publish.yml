@@ -53,7 +53,7 @@ jobs:
     container: registry.fedoraproject.org/fedora:44
     steps:
       - name: Install tools
-        run: dnf -q -y install git gh createrepo_c rpm gnupg2
+        run: dnf -q -y install git gh createrepo_c rpm gnupg2 dpkg-dev pacman bsdtar zstd
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -64,7 +64,7 @@ jobs:
         run: |
           mkdir -p site
           bash scripts/releases.sh > site/releases.txt
-          bash scripts/collect.sh site/rpm/fedora/44/x86_64
+          bash scripts/collect.sh site
       - name: Check, index and sign
         env:
           RPM_SIGNING_KEY: ${{ secrets.RPM_SIGNING_KEY }}

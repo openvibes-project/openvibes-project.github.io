@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Tests scripts/build-repo.sh with a throwaway key: a fully signed set is
 # indexed and its metadata signed; one unsigned package, or an installer
-# with no key fingerprint, stops the publish. Needs rpm-build, rpm-sign,
-# gnupg2, createrepo_c.
+# with no key fingerprint, stops the publish; the apt repository's
+# InRelease and the pacman database are signed, and an Arch package without
+# a valid signature stops it too. Needs rpm-build, rpm-sign, gnupg2,
+# createrepo_c, dpkg-dev, pacman, bsdtar, zstd.
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
@@ -18,6 +20,19 @@ package() { # NAME DIR
     rpmbuild -bb --define "_topdir $T/build/$1" "$T/build/$1/$1.spec" >/dev/null 2>&1
     mkdir -p "$2"; cp "$T/build/$1"/RPMS/noarch/*.rpm "$2/"
 }
+deb() { # NAME DIR: a minimal .deb
+    mkdir -p "$T/deb/$1/DEBIAN" "$2"
+    printf 'Package: %s\nVersion: 1\nArchitecture: amd64\nMaintainer: t <t@example.invalid>\nDescription: test\n' "$1" > "$T/deb/$1/DEBIAN/control"
+    dpkg-deb --build "$T/deb/$1" "$2/${1}_1_amd64.deb" >/dev/null
+}
+arch() { # NAME DIR [unsigned]: a minimal Arch package, signed with the test key unless "unsigned"
+    local w=$T/arch/$1 p=$2/$1-1-1-x86_64.pkg.tar.zst
+    mkdir -p "$w/usr/share/$1" "$2"
+    printf 'pkgname = %s\npkgbase = %s\npkgver = 1-1\npkgdesc = test\narch = x86_64\nsize = 0\n' "$1" "$1" > "$w/.PKGINFO"
+    : > "$w/usr/share/$1/f"
+    (cd "$w" && bsdtar -cf - .PKGINFO usr | zstd -q -o "$p")
+    [[ ${3:-} == unsigned ]] || gpg --batch --pinentry-mode loopback --passphrase pw --detach-sign --output "$p.sig" "$p"
+}
 site() { # DIR: a copy of this repository's site sources with the test key
     local dir=$1
     mkdir -p "$dir"
@@ -29,8 +44,12 @@ site() { # DIR: a copy of this repository's site sources with the test key
 export RPM_SIGNING_KEY=$KEY RPM_SIGNING_PASSPHRASE=pw
 repo=rpm/fedora/44/x86_64
 
+# Signing test packages (Arch) needs the key in this shell's keyring.
+printf '%s' "$KEY" | gpg --batch --quiet --pinentry-mode loopback --passphrase pw --import 2>/dev/null
+
 # A signed set: indexed, metadata signed and verifiable.
 site "$T/src1"; package one "$T/site1/$repo"; package two "$T/site1/$repo"
+deb one "$T/site1/deb"; arch one "$T/site1/arch/x86_64"
 bash "$ROOT/scripts/sign-rpms.sh" "$T/site1/$repo" "$T/key.pub"
 (cd "$T/src1" && bash "$ROOT/scripts/build-repo.sh" "$T/site1" openvibes.gpg) || { echo "FAIL: a signed set was refused"; exit 1; }
 test -s "$T/site1/$repo/repodata/repomd.xml.asc" || { echo "FAIL: no repomd.xml.asc"; exit 1; }
@@ -38,6 +57,36 @@ gpg --batch --import "$T/key.pub" 2>/dev/null
 gpg --batch --verify "$T/site1/$repo/repodata/repomd.xml.asc" "$T/site1/$repo/repodata/repomd.xml" 2>/dev/null ||
     { echo "FAIL: repomd.xml signature does not verify"; exit 1; }
 for f in install.sh openvibes.gpg openvibes.repo index.html packages.html site.css assets/wordmark-dark.svg; do [[ -s $T/site1/$f ]] || { echo "FAIL: $f missing"; exit 1; }; done
+# apt: a flat repository whose Release hashes Packages and is clear-signed.
+gpg --batch --verify "$T/site1/deb/InRelease" 2>/dev/null || { echo "FAIL: InRelease does not verify"; exit 1; }
+grep -q '^Package: one$' "$T/site1/deb/Packages" || { echo "FAIL: the .deb is not indexed"; exit 1; }
+sha=$(sha256sum "$T/site1/deb/Packages" | cut -d' ' -f1)
+grep -qE "^ $sha [0-9]+ Packages\$" "$T/site1/deb/Release" || { echo "FAIL: Release does not hash Packages"; exit 1; }
+# pacman: the database lists the package, is a plain file, and is signed.
+gpg --batch --verify "$T/site1/arch/x86_64/openvibes.db.sig" "$T/site1/arch/x86_64/openvibes.db" 2>/dev/null ||
+    { echo "FAIL: openvibes.db.sig does not verify"; exit 1; }
+[[ -f $T/site1/arch/x86_64/openvibes.db && ! -L $T/site1/arch/x86_64/openvibes.db ]] || { echo "FAIL: openvibes.db is missing or a symlink"; exit 1; }
+bsdtar -tf "$T/site1/arch/x86_64/openvibes.db" | grep -q '^one-1-1/' || { echo "FAIL: the Arch package is not in openvibes.db"; exit 1; }
+
+# An Arch package without a signature: refused.
+site "$T/src4"; package six "$T/site4/$repo"
+bash "$ROOT/scripts/sign-rpms.sh" "$T/site4/$repo" "$T/key.pub"
+arch seven "$T/site4/arch/x86_64" unsigned
+if out=$(cd "$T/src4" && bash "$ROOT/scripts/build-repo.sh" "$T/site4" openvibes.gpg 2>&1); then
+    echo "FAIL: an unsigned Arch package was published"; exit 1
+fi
+grep -q 'is not signed with the OpenVIBES key' <<<"$out" || { echo "FAIL: an unsigned Arch package refused for another reason: $out"; exit 1; }
+# One signed by another key: refused.
+site "$T/src5"; package eight "$T/site5/$repo"
+bash "$ROOT/scripts/sign-rpms.sh" "$T/site5/$repo" "$T/key.pub"
+gpg --batch --pinentry-mode loopback --passphrase pw --quick-gen-key "other <o@example.invalid>" rsa2048 sign 1d 2>/dev/null
+arch nine "$T/site5/arch/x86_64" unsigned
+gpg --batch --pinentry-mode loopback --passphrase pw --local-user "other <o@example.invalid>" --detach-sign \
+    --output "$T/site5/arch/x86_64/nine-1-1-x86_64.pkg.tar.zst.sig" "$T/site5/arch/x86_64/nine-1-1-x86_64.pkg.tar.zst"
+if out=$(cd "$T/src5" && bash "$ROOT/scripts/build-repo.sh" "$T/site5" openvibes.gpg 2>&1); then
+    echo "FAIL: an Arch package signed by another key was published"; exit 1
+fi
+grep -q 'is not signed with the OpenVIBES key' <<<"$out" || { echo "FAIL: an Arch package signed by another key refused for another reason: $out"; exit 1; }
 
 # One unsigned package: refused.
 site "$T/src2"; package three "$T/site2/$repo"

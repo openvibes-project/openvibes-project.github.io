@@ -19,6 +19,14 @@ if grep -q '^KEY_FINGERPRINT=unset$' install.sh; then
 fi
 mkdir -p "$repo"
 shopt -s nullglob; rpms=("$repo"/*.rpm); shopt -u nullglob
+# The assistant's model (openvibes-llm-model-part*, gigabytes) comes from its
+# publisher, not from here (decisions.md 2026-10-09). The empty
+# openvibes-llm-model that keeps an upgraded host's model file stays.
+for f in "${rpms[@]}"; do
+    case ${f##*/} in
+        *-llm-model-part*) echo "build-repo: $f: model packages are not published here (the model comes from its publisher)" >&2; exit 1 ;;
+    esac
+done
 if ((${#rpms[@]})); then
     bash "$here/sign-rpms.sh" --check-only "$repo" "$pubkey"
 fi

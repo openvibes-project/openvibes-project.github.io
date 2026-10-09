@@ -16,6 +16,8 @@ for repo in openvibes-platform openvibes-agent openvibes-rules; do
             gh release view "$tag" -R "openvibes-project/$repo" --json assets --jq '.assets[].name' |
                 while read -r a; do
                     case $a in
+                        # The model's gigabytes come from its publisher (decisions.md 2026-10-09).
+                        *-llm-model-part*) continue ;;
                         *.rpm) d=$rpm ;;
                         *.deb | *.deb.sig) d=$deb ;;
                         *.pkg.tar.zst | *.pkg.tar.zst.sig) d=$arch ;;

@@ -103,6 +103,14 @@ arch nine "$T/site5/arch/x86_64" unsigned
 gpg --batch --pinentry-mode loopback --passphrase pw --local-user "other <o@example.invalid>" --detach-sign \
     --output "$T/site5/arch/x86_64/nine-1-1-x86_64.pkg.tar.zst.sig" "$T/site5/arch/x86_64/nine-1-1-x86_64.pkg.tar.zst"
 refused 5 "an Arch package signed by another key"
+# The assistant's model is not ours to host (it comes from its publisher):
+# a model part package in the repository stops the publish, signed or not.
+site "$T/src9"; package openvibes-llm-model-part1 "$T/site9/$repo"
+bash "$ROOT/scripts/sign-rpms.sh" "$T/site9/$repo" "$T/key.pub"
+if out=$(cd "$T/src9" && bash "$ROOT/scripts/build-repo.sh" "$T/site9" openvibes.gpg 2>&1); then
+    echo "FAIL: a model package was published"; exit 1
+fi
+grep -q 'model packages are not published' <<<"$out" || { echo "FAIL: model package refused for another reason: $out"; exit 1; }
 # A .deb without a signature: refused.
 site "$T/src6"; package ten "$T/site6/$repo"
 bash "$ROOT/scripts/sign-rpms.sh" "$T/site6/$repo" "$T/key.pub"

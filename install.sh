@@ -91,9 +91,22 @@ check_key() {
     got=${keys#* }
     [ "$got" = "$KEY_FINGERPRINT" ] || die "the package key's fingerprint is ${got:-unreadable}, expected $KEY_FINGERPRINT"
 }
+# pinned_key IN OUT: IN passes check_key; OUT is gpg's own export of the pinned
+# key alone. rpm, apt, pacman and dnf are given OUT, never IN: they parse key
+# files themselves, and anything they read that gpg did not would be trusted.
+pinned_key() {
+    check_key "$1"
+    pk_home=$(mktemp -d)
+    GNUPGHOME=$pk_home gpg --batch -q --import "$1" 2>/dev/null || :
+    GNUPGHOME=$pk_home gpg --batch -q --armor --export-options export-minimal --export "$KEY_FINGERPRINT" > "$2" 2>/dev/null || :
+    gpgconf --homedir "$pk_home" --kill all 2>/dev/null || :
+    rm -rf "$pk_home"
+    [ -s "$2" ] || die "could not export the package key $KEY_FINGERPRINT"
+    check_key "$2"
+}
 # Test hooks (tests/test-install-ca.sh, tests/test-install-key.sh): one check alone.
 if [ "${1:-}" = --canonical-ca ]; then [ $# = 3 ] || usage; canonical_ca "$2" "$3"; exit 0; fi
-if [ "${1:-}" = --check-key ]; then [ $# = 2 ] || usage; check_key "$2"; exit 0; fi
+if [ "${1:-}" = --pinned-key ]; then [ $# = 3 ] || usage; pinned_key "$2" "$3"; exit 0; fi
 
 mode=platform platform='' token='' fp='' rules='' alarm_rules='' dport=''
 while [ $# -gt 0 ]; do
@@ -207,7 +220,7 @@ fi
 
 # The repository and its key.
 curl -fsSL "$SITE/openvibes.gpg" -o "$tmp/openvibes.gpg" || die "could not download $SITE/openvibes.gpg"
-check_key "$tmp/openvibes.gpg"
+pinned_key "$tmp/openvibes.gpg" "$tmp/pinned.asc"
 case $family in
     rpm)
         # The agent RPM is the same file for every rpm system; EL's
@@ -216,30 +229,43 @@ case $family in
         # shellcheck disable=SC2016  # dnf expands $releasever
         release='$releasever'
         [ "$os_id" = fedora ] || release=44
-        cat > "$tmp/openvibes.repo" <<EOF
+        # gpgkey is the checked export on disk: with the website's URL, dnf
+        # would fetch and trust the raw file itself.
+        # Ours, always rewritten with the checked export (a renewed key must get through).
+        install -D -m 0644 "$tmp/pinned.asc" /etc/pki/rpm-gpg/RPM-GPG-KEY-openvibes
+        repo_file() { # GPGKEY OUT
+            cat > "$2" <<EOF
 [openvibes]
 name=OpenVIBES
 baseurl=$SITE/rpm/fedora/$release/\$basearch/
 enabled=1
 gpgcheck=1
 repo_gpgcheck=1
-gpgkey=$SITE/openvibes.gpg
+gpgkey=$1
 EOF
+        }
+        repo_file file:///etc/pki/rpm-gpg/RPM-GPG-KEY-openvibes "$tmp/openvibes.repo"
+        repo_file "$SITE/openvibes.gpg" "$tmp/openvibes.repo.old"
+        # Installers before 2026-10-09 wrote gpgkey=$SITE/openvibes.gpg: that exact
+        # file is ours to replace; any other edit is refused by put_file.
+        if [ -f /etc/yum.repos.d/openvibes.repo ] && cmp -s "$tmp/openvibes.repo.old" /etc/yum.repos.d/openvibes.repo; then
+            install -m 0644 "$tmp/openvibes.repo" /etc/yum.repos.d/openvibes.repo
+        fi
         put_file "$tmp/openvibes.repo" /etc/yum.repos.d/openvibes.repo
-        rpm --import "$tmp/openvibes.gpg"
+        rpm --import "$tmp/pinned.asc"
         # dnf keeps a repository index for up to 48 h; one cached before a release
         # does not list the new packages.
         dnf makecache -y -q --refresh --repo openvibes >/dev/null || die "could not load the OpenVIBES repository index" ;;
     deb)
         # A flat repository; apt reads the armoured key from signed-by (apt 2.4+).
-        put_file "$tmp/openvibes.gpg" /etc/apt/keyrings/openvibes.asc
+        install -D -m 0644 "$tmp/pinned.asc" /etc/apt/keyrings/openvibes.asc   # ours, always the checked export
         echo "deb [signed-by=/etc/apt/keyrings/openvibes.asc] $SITE/deb ./" > "$tmp/openvibes.list"
         put_file "$tmp/openvibes.list" /etc/apt/sources.list.d/openvibes.list
         apt-get update -q -o Dir::Etc::sourcelist=sources.list.d/openvibes.list \
             -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0 >/dev/null ||
             die "could not load the OpenVIBES repository index" ;;
     arch)
-        { pacman-key --add "$tmp/openvibes.gpg" && pacman-key --lsign-key "$KEY_FINGERPRINT"; } >/dev/null 2>&1 ||
+        { pacman-key --add "$tmp/pinned.asc" && pacman-key --lsign-key "$KEY_FINGERPRINT"; } >/dev/null 2>&1 ||
             die "could not add the package key to pacman's keyring"
         # shellcheck disable=SC2016  # pacman expands $arch
         server='Server = '"$SITE"'/arch/$arch'

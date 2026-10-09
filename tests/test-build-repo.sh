@@ -74,6 +74,12 @@ gpg --batch --verify "$T/site1/deb/InRelease" 2>/dev/null || { echo "FAIL: InRel
 grep -q '^Package: one$' "$T/site1/deb/Packages" || { echo "FAIL: the .deb is not indexed"; exit 1; }
 sha=$(sha256sum "$T/site1/deb/Packages" | cut -d' ' -f1)
 grep -qE "^ $sha [0-9]+ Packages\$" "$T/site1/deb/Release" || { echo "FAIL: Release does not hash Packages"; exit 1; }
+# Valid-Until: a stale signed index can't be replayed for long (publish.yml
+# rebuilds weekly, well inside it).
+until=$(sed -n 's/^Valid-Until: //p' "$T/site1/deb/Release")
+[[ -n $until ]] || { echo "FAIL: Release has no Valid-Until"; exit 1; }
+left=$(( $(date -d "$until" +%s) - $(date +%s) ))
+(( left > 20 * 86400 && left <= 31 * 86400 )) || { echo "FAIL: Valid-Until $until is not about 30 days ahead"; exit 1; }
 # pacman: the database lists the package, is a plain file, and is signed.
 gpg --batch --verify "$T/site1/arch/x86_64/openvibes.db.sig" "$T/site1/arch/x86_64/openvibes.db" 2>/dev/null ||
     { echo "FAIL: openvibes.db.sig does not verify"; exit 1; }

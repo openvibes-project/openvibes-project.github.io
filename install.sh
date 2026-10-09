@@ -55,9 +55,9 @@ install_package() {
     case $family in
         rpm) set -- dnf install -y "$pkg" ;;
         deb) set -- env DEBIAN_FRONTEND=noninteractive apt-get install -y "$pkg" ;;
-        # ponytail: -Sy without -u; the agent needs only glibc, libgcc and
-        # systemd, already current on a maintained host.
-        arch) set -- pacman -Sy --noconfirm --needed "$pkg" ;;
+        # -Syu: Arch supports no partial upgrades; refreshing the package lists
+        # without upgrading would leave the host's next pacman -S one.
+        arch) set -- pacman -Syu --noconfirm --needed "$pkg" ;;
     esac
     "$@" > "$tmp/install.log" 2>&1 || {
         tail -n 25 "$tmp/install.log" >&2
@@ -120,9 +120,25 @@ pinned_key() {
     [ -s "$2" ] || die "could not export the package key $KEY_FINGERPRINT"
     check_key "$2"
 }
-# Test hooks (tests/test-install-ca.sh, tests/test-install-key.sh): one check alone.
+# pacman_section CONF: CONF gets the [openvibes] section, or already has
+# exactly the installer's one (its lines, comments and blanks aside): an
+# existing section with another SigLevel or Server is someone else's.
+pacman_section() {
+    # shellcheck disable=SC2016  # pacman expands $arch
+    ps_want=$(printf 'SigLevel = Required DatabaseRequired\nServer = %s/arch/$arch' "$SITE")
+    if grep -q '^\[openvibes\]' "$1"; then
+        ps_have=$(awk '/^\[/ { in_s = ($0 == "[openvibes]"); next } in_s && NF && !/^[[:space:]]*#/' "$1")
+        [ "$ps_have" = "$ps_want" ] ||
+            die "$1 has an [openvibes] section that differs from this installer's; check or remove it"
+    else
+        printf '\n[openvibes]\n%s\n' "$ps_want" >> "$1"
+    fi
+}
+# Test hooks (tests/test-install-ca.sh, tests/test-install-key.sh,
+# tests/test-install-pacman.sh): one step alone.
 if [ "${1:-}" = --canonical-ca ]; then [ $# = 3 ] || usage; canonical_ca "$2" "$3"; exit 0; fi
 if [ "${1:-}" = --pinned-key ]; then [ $# = 3 ] || usage; pinned_key "$2" "$3"; exit 0; fi
+if [ "${1:-}" = --pacman-section ]; then [ $# = 2 ] || usage; pacman_section "$2"; exit 0; fi
 
 mode=platform platform='' token='' fp='' rules='' alarm_rules='' dport=''
 while [ $# -gt 0 ]; do
@@ -283,14 +299,7 @@ EOF
     arch)
         { pacman-key --add "$tmp/pinned.asc" && pacman-key --lsign-key "$KEY_FINGERPRINT"; } >/dev/null 2>&1 ||
             die "could not add the package key to pacman's keyring"
-        # shellcheck disable=SC2016  # pacman expands $arch
-        server='Server = '"$SITE"'/arch/$arch'
-        if grep -q '^\[openvibes\]' /etc/pacman.conf; then
-            grep -qxF "$server" /etc/pacman.conf ||
-                die "/etc/pacman.conf has an [openvibes] section that differs from this installer's; check or remove it"
-        else
-            printf '\n[openvibes]\nSigLevel = Required DatabaseRequired\n%s\n' "$server" >> /etc/pacman.conf
-        fi ;;
+        pacman_section /etc/pacman.conf ;;
 esac
 done_so_far="repository added"
 

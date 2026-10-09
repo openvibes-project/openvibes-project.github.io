@@ -56,6 +56,8 @@ if compgen -G "$deb/*.deb" >/dev/null; then
         echo "Label: OpenVIBES"
         echo "Architectures: amd64"
         echo "Date: $(LC_ALL=C date -Ru)"
+        # A stale signed index can't be replayed past this; publish.yml rebuilds weekly.
+        echo "Valid-Until: $(LC_ALL=C date -Ru -d '+30 days')"
         echo "SHA256:"
         for f in Packages Packages.gz; do
             printf ' %s %s %s\n' "$(sha256sum "$deb/$f" | cut -d' ' -f1)" "$(stat -c %s "$deb/$f")" "$f"

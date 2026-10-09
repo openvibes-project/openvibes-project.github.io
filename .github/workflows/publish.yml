@@ -38,7 +38,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           bash scripts/releases.sh > releases.txt
-          if [ "$GITHUB_EVENT_NAME" = schedule ] &&
+          # The apt index carries a Valid-Until 30 days ahead (build-repo.sh):
+          # rebuild once fewer than 14 are left, even with no new release.
+          fresh=true
+          if until=$(curl -fsS https://openvibes-project.github.io/deb/InRelease | sed -n 's/^Valid-Until: //p') &&
+              [ -n "$until" ] && [ $(( $(date -d "$until" +%s) - $(date +%s) )) -lt $((14 * 86400)) ]; then
+              fresh=false
+          fi
+          if [ "$GITHUB_EVENT_NAME" = schedule ] && [ "$fresh" = true ] &&
               curl -fsS https://openvibes-project.github.io/releases.txt | cmp -s - releases.txt; then
               echo "changed=false" >> "$GITHUB_OUTPUT"
           else

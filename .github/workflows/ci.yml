@@ -33,6 +33,7 @@ jobs:
         run: |
           bash tests/test-install-ca.sh
           bash tests/test-install-key.sh
+          bash tests/test-install-pacman.sh
 
   install:
     name: Installer end to end (podman, systemd)

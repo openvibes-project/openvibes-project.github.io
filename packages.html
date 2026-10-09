@@ -35,7 +35,7 @@
   <h2>The repositories</h2>
   <p>The installer adds the right one for you; all are x86_64 and signed with the key below. Released versions: <a href="releases.txt">releases.txt</a>.</p>
   <ul>
-    <li><b>dnf</b> (Fedora 44; AlmaLinux and Rocky Linux 9+, agent only): <a href="openvibes.repo">openvibes.repo</a> in <code>/etc/yum.repos.d/</code>. On AlmaLinux and Rocky, the installer points it at the Fedora 44 folder: the agent package is the same file.</li>
+    <li><b>dnf</b> (Fedora 44; AlmaLinux and Rocky Linux 9+, agent only): <a href="openvibes.repo">openvibes.repo</a> in <code>/etc/yum.repos.d/</code>, and the key, once you have checked its fingerprint, as <code>/etc/pki/rpm-gpg/RPM-GPG-KEY-openvibes</code> (the repository file names it there, so dnf never fetches a key itself). On AlmaLinux and Rocky, the installer points the repository at the Fedora 44 folder: the agent package is the same file.</li>
     <li><b>apt</b> (Debian 12+, Ubuntu 22.04+, agent only): the key as <code>/etc/apt/keyrings/openvibes.asc</code>, and in <code>/etc/apt/sources.list.d/openvibes.list</code>:
       <pre><code>deb [signed-by=/etc/apt/keyrings/openvibes.asc] https://openvibes-project.github.io/deb ./</code></pre></li>
     <li><b>pacman</b> (Arch, agent only): the key added with <code>pacman-key --add openvibes.gpg</code> and <code>pacman-key --lsign-key</code> (fingerprint below), and in <code>/etc/pacman.conf</code>:

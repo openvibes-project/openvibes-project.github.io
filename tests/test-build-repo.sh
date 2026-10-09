@@ -20,10 +20,20 @@ package() { # NAME DIR
     rpmbuild -bb --define "_topdir $T/build/$1" "$T/build/$1/$1.spec" >/dev/null 2>&1
     mkdir -p "$2"; cp "$T/build/$1"/RPMS/noarch/*.rpm "$2/"
 }
-deb() { # NAME DIR: a minimal .deb
+deb() { # NAME DIR [unsigned]: a minimal .deb with a detached signature by the test key unless "unsigned"
+    local p=$2/${1}_1_amd64.deb
     mkdir -p "$T/deb/$1/DEBIAN" "$2"
     printf 'Package: %s\nVersion: 1\nArchitecture: amd64\nMaintainer: t <t@example.invalid>\nDescription: test\n' "$1" > "$T/deb/$1/DEBIAN/control"
-    dpkg-deb --build "$T/deb/$1" "$2/${1}_1_amd64.deb" >/dev/null
+    dpkg-deb --build "$T/deb/$1" "$p" >/dev/null
+    [[ ${3:-} == unsigned ]] || gpg --batch --pinentry-mode loopback --passphrase pw --detach-sign --output "$p.sig" "$p"
+}
+# refused NAME DESC: building site NAME fails because a package is not signed by the key.
+refused() {
+    local out
+    if out=$(cd "$T/src$1" && bash "$ROOT/scripts/build-repo.sh" "$T/site$1" openvibes.gpg 2>&1); then
+        echo "FAIL: $2 was published"; exit 1
+    fi
+    grep -q 'is not signed with the OpenVIBES key' <<<"$out" || { echo "FAIL: $2 refused for another reason: $out"; exit 1; }
 }
 arch() { # NAME DIR [unsigned]: a minimal Arch package, signed with the test key unless "unsigned"
     local w=$T/arch/$1 p=$2/$1-1-1-x86_64.pkg.tar.zst
@@ -72,10 +82,7 @@ bsdtar -tf "$T/site1/arch/x86_64/openvibes.db" | grep -q '^one-1-1/' || { echo "
 site "$T/src4"; package six "$T/site4/$repo"
 bash "$ROOT/scripts/sign-rpms.sh" "$T/site4/$repo" "$T/key.pub"
 arch seven "$T/site4/arch/x86_64" unsigned
-if out=$(cd "$T/src4" && bash "$ROOT/scripts/build-repo.sh" "$T/site4" openvibes.gpg 2>&1); then
-    echo "FAIL: an unsigned Arch package was published"; exit 1
-fi
-grep -q 'is not signed with the OpenVIBES key' <<<"$out" || { echo "FAIL: an unsigned Arch package refused for another reason: $out"; exit 1; }
+refused 4 "an unsigned Arch package"
 # One signed by another key: refused.
 site "$T/src5"; package eight "$T/site5/$repo"
 bash "$ROOT/scripts/sign-rpms.sh" "$T/site5/$repo" "$T/key.pub"
@@ -83,10 +90,25 @@ gpg --batch --pinentry-mode loopback --passphrase pw --quick-gen-key "other <o@e
 arch nine "$T/site5/arch/x86_64" unsigned
 gpg --batch --pinentry-mode loopback --passphrase pw --local-user "other <o@example.invalid>" --detach-sign \
     --output "$T/site5/arch/x86_64/nine-1-1-x86_64.pkg.tar.zst.sig" "$T/site5/arch/x86_64/nine-1-1-x86_64.pkg.tar.zst"
-if out=$(cd "$T/src5" && bash "$ROOT/scripts/build-repo.sh" "$T/site5" openvibes.gpg 2>&1); then
-    echo "FAIL: an Arch package signed by another key was published"; exit 1
-fi
-grep -q 'is not signed with the OpenVIBES key' <<<"$out" || { echo "FAIL: an Arch package signed by another key refused for another reason: $out"; exit 1; }
+refused 5 "an Arch package signed by another key"
+# A .deb without a signature: refused.
+site "$T/src6"; package ten "$T/site6/$repo"
+bash "$ROOT/scripts/sign-rpms.sh" "$T/site6/$repo" "$T/key.pub"
+deb eleven "$T/site6/deb" unsigned
+refused 6 "an unsigned .deb"
+# A signed message by the right key in place of a detached signature (the
+# site publishes one: InRelease): refused.
+site "$T/src7"; package twelve "$T/site7/$repo"
+bash "$ROOT/scripts/sign-rpms.sh" "$T/site7/$repo" "$T/key.pub"
+arch thirteen "$T/site7/arch/x86_64" unsigned
+cp "$T/site1/deb/InRelease" "$T/site7/arch/x86_64/thirteen-1-1-x86_64.pkg.tar.zst.sig"
+refused 7 "an Arch package whose .sig is a signed message"
+# A detached signature by the right key over other data: refused.
+site "$T/src8"; package fourteen "$T/site8/$repo"
+bash "$ROOT/scripts/sign-rpms.sh" "$T/site8/$repo" "$T/key.pub"
+deb fifteen "$T/site8/deb" unsigned
+cp "$T/site1/deb/one_1_amd64.deb.sig" "$T/site8/deb/fifteen_1_amd64.deb.sig"
+refused 8 "a .deb with another package's signature"
 
 # One unsigned package: refused.
 site "$T/src2"; package three "$T/site2/$repo"

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Downloads the packages of every published (non-draft) release of
 # openvibes-platform, openvibes-agent and openvibes-rules into SITE's
-# repositories: RPMs to rpm/fedora/44/x86_64, .debs to deb, Arch packages
+# repositories: RPMs to rpm/fedora/44/x86_64, .debs and their signatures to deb, Arch packages
 # and their signatures to arch/x86_64. Only the kinds a release has are
 # fetched (gh release download -p fails when nothing matches). Needs GH_TOKEN.
 set -euo pipefail
@@ -17,7 +17,7 @@ for repo in openvibes-platform openvibes-agent openvibes-rules; do
                 while read -r a; do
                     case $a in
                         *.rpm) d=$rpm ;;
-                        *.deb) d=$deb ;;
+                        *.deb | *.deb.sig) d=$deb ;;
                         *.pkg.tar.zst | *.pkg.tar.zst.sig) d=$arch ;;
                         *) continue ;;
                     esac

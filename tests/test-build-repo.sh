@@ -35,10 +35,11 @@ refused() {
     fi
     grep -q 'is not signed with the OpenVIBES key' <<<"$out" || { echo "FAIL: $2 refused for another reason: $out"; exit 1; }
 }
-arch() { # NAME DIR [unsigned]: a minimal Arch package, signed with the test key unless "unsigned"
-    local w=$T/arch/$1 p=$2/$1-1-1-x86_64.pkg.tar.zst
+arch() { # NAME DIR [unsigned [VERSION]]: a minimal Arch package (VERSION-1, default 1), signed with the test key unless "unsigned"
+    local v=${4:-1}
+    local w=$T/arch/$1-$v p=$2/$1-$v-1-x86_64.pkg.tar.zst
     mkdir -p "$w/usr/share/$1" "$2"
-    printf 'pkgname = %s\npkgbase = %s\npkgver = 1-1\npkgdesc = test\narch = x86_64\nsize = 0\n' "$1" "$1" > "$w/.PKGINFO"
+    printf 'pkgname = %s\npkgbase = %s\npkgver = %s-1\npkgdesc = test\narch = x86_64\nsize = 0\n' "$1" "$1" "$v" > "$w/.PKGINFO"
     : > "$w/usr/share/$1/f"
     (cd "$w" && bsdtar -cf - .PKGINFO usr | zstd -q -o "$p")
     [[ ${3:-} == unsigned ]] || gpg --batch --pinentry-mode loopback --passphrase pw --detach-sign --output "$p.sig" "$p"
@@ -60,6 +61,7 @@ printf '%s' "$KEY" | gpg --batch --quiet --pinentry-mode loopback --passphrase p
 # A signed set: indexed, metadata signed and verifiable.
 site "$T/src1"; package one "$T/site1/$repo"; package two "$T/site1/$repo"
 deb one "$T/site1/deb"; arch one "$T/site1/arch/x86_64"
+arch multi "$T/site1/arch/x86_64" signed 9; arch multi "$T/site1/arch/x86_64" signed 10
 bash "$ROOT/scripts/sign-rpms.sh" "$T/site1/$repo" "$T/key.pub"
 (cd "$T/src1" && bash "$ROOT/scripts/build-repo.sh" "$T/site1" openvibes.gpg) || { echo "FAIL: a signed set was refused"; exit 1; }
 test -s "$T/site1/$repo/repodata/repomd.xml.asc" || { echo "FAIL: no repomd.xml.asc"; exit 1; }
@@ -77,6 +79,10 @@ gpg --batch --verify "$T/site1/arch/x86_64/openvibes.db.sig" "$T/site1/arch/x86_
     { echo "FAIL: openvibes.db.sig does not verify"; exit 1; }
 [[ -f $T/site1/arch/x86_64/openvibes.db && ! -L $T/site1/arch/x86_64/openvibes.db ]] || { echo "FAIL: openvibes.db is missing or a symlink"; exit 1; }
 bsdtar -tf "$T/site1/arch/x86_64/openvibes.db" | grep -q '^one-1-1/' || { echo "FAIL: the Arch package is not in openvibes.db"; exit 1; }
+# Two versions of one package: the database lists the newer one, though its
+# file name sorts first as a string (0.2.10 before 0.2.9).
+bsdtar -tf "$T/site1/arch/x86_64/openvibes.db" | grep -q '^multi-10-1/' ||
+    { echo "FAIL: openvibes.db lists $(bsdtar -tf "$T/site1/arch/x86_64/openvibes.db" | grep -o '^multi-[^/]*' | sort -u), not multi-10-1"; exit 1; }
 
 # An Arch package without a signature: refused.
 site "$T/src4"; package six "$T/site4/$repo"

@@ -216,6 +216,9 @@ for system in debian=docker.io/library/debian:12 ubuntu=docker.io/library/ubuntu
     out=$(in_c "$name" "$ENV sh /test/install.sh ${line#*sh -s -- }" 2>&1) || { echo "$out"; fail "install.sh --agent on $base"; }
     id=$(sed -n 's/.*enrolled as \(agent\.[0-9a-f-]*\).*/\1/p' <<<"$out")
     [[ -n $id ]] || { echo "$out"; fail "no 'enrolled as' on $base"; }
+    # The package lists owners.conf on every format, so the services collector is on.
+    in_c "$name" 'grep -q "^collectors = .*\"services\"" /etc/openvibes-agent/agent.toml' ||
+        { in_c "$name" 'cat /etc/openvibes-agent/agent.toml'; fail "$base: no services collector"; }
     wait_for "$base: the agent accepted the baseline rule set" 180 platform \
         "runuser -u openvibes-admin -- openvibes-admin agent show $id | grep -q '^rule set baseline version [0-9]'"
     ok "$base: agent installed from its repository and enrolled"

@@ -71,7 +71,9 @@ if compgen -G "$arch/*.pkg.tar.zst" >/dev/null; then
     for p in "$arch"/*.pkg.tar.zst; do
         signed_by_key "$p" || { echo "build-repo: $p is not signed with the OpenVIBES key" >&2; exit 1; }
     done
-    (cd "$arch" && rm -f openvibes.db* openvibes.files* && repo-add -q openvibes.db.tar.gz ./*.pkg.tar.zst)
+    # -p: never replace an entry with an older version. The glob is in string
+    # order (0.2.10 before 0.2.9), and repo-add otherwise keeps the last one.
+    (cd "$arch" && rm -f openvibes.db* openvibes.files* && repo-add -q -p openvibes.db.tar.gz ./*.pkg.tar.zst)
     for f in openvibes.db openvibes.files; do cp --remove-destination "$arch/$f.tar.gz" "$arch/$f"; done
     gpg --batch --yes --pinentry-mode loopback --passphrase-file "$T/pass" \
         --detach-sign --output "$arch/openvibes.db.sig" "$arch/openvibes.db"

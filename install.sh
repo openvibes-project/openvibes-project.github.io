@@ -64,6 +64,22 @@ install_package() {
         die "the package manager could not install $pkg"
     }
 }
+# installed NAME: the package is installed, by this system's package manager.
+installed() {
+    case $family in
+        rpm) rpm -q --quiet "$1" ;;
+        deb) dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q 'install ok installed' ;;
+        arch) pacman -Q "$1" >/dev/null 2>&1 ;;
+    esac
+}
+# package_files NAME: the files the installed package owns.
+package_files() {
+    case $family in
+        rpm) rpm -ql "$1" ;;
+        deb) dpkg-query -L "$1" ;;
+        arch) pacman -Qlq "$1" ;;
+    esac
+}
 # put_file NEW DEST: install NEW at DEST, or keep DEST if it is the same;
 # a different DEST is someone's edit, not ours to overwrite.
 put_file() {
@@ -309,7 +325,14 @@ ca=$(canonical_ca "$tmp/ca.pem" "$tmp/ca-trusted.pem") || exit 1
 curl -fsS --cacert "$tmp/ca-trusted.pem" --max-time 10 "$url/v1/ca" -o /dev/null ||
     die "the server at $url does not hold a certificate from that CA"
 
-install_package openvibes-agent
+# An agent package already installed (an image, the lab's own build, a
+# pinned version) is kept: apt and pacman would replace it with the
+# repository's newest, which dnf install never does.
+if installed openvibes-agent; then
+    say "openvibes-agent is already installed; configuring it"
+else
+    install_package openvibes-agent
+fi
 done_so_far="openvibes-agent installed, not configured"
 platform_url=https://$host
 [ "$port" = 18423 ] || platform_url=$url
@@ -336,7 +359,7 @@ elif [ -n "$alarm_rules" ]; then
     # file list, so a nodocs install counts too). An older agent would
     # refuse the name; without this list its own default applies.
     services=''
-    if rpm -ql openvibes-agent 2>/dev/null | grep -q '/owners\.conf$'; then
+    if package_files openvibes-agent 2>/dev/null | grep -q '/owners\.conf$'; then
         services=', "services"'
     fi
     cat >> "$tmp/agent.toml" <<EOF

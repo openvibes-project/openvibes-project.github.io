@@ -26,6 +26,19 @@
   <h2>Install the platform</h2>
   <pre><code>sudo sh -c "$(curl -fsSL https://openvibes-project.github.io/install.sh)"</code></pre>
   <p>It adds this repository, installs the administration tool and opens its Setup. No output at all means the download failed: check your connection and run it again. Safer: download <a href="install.sh">install.sh</a>, read it, then run <code>sudo sh install.sh</code>.</p>
+  <p>In Setup, choose the assistant and answer <b>Y</b> to download the model. To add the assistant later: <code>sudo openvibes-admin assistant model fetch</code>, then <code>sudo openvibes-admin helper assistant-setup</code>.</p>
+</section>
+<section class="block" id="offline">
+  <h2>Install without internet</h2>
+  <p>Fedora 44, x86_64. The offline kit holds every platform package and its Fedora dependencies, PostgreSQL included; its installer never uses the internet.</p>
+  <ol>
+    <li>Download <code>openvibes-platform-&lt;version&gt;-offline-fedora44.tar</code> from the <a href="https://github.com/openvibes-project/openvibes-platform/releases/latest">latest platform release</a>, and optionally the model (below), in any browser.</li>
+    <li>Copy both to the server, into the same folder.</li>
+    <li><code>tar xf openvibes-platform-&lt;version&gt;-offline-fedora44.tar &amp;&amp; sudo ./openvibes-offline/install</code></li>
+  </ol>
+  <p>The kit checks its own signature with the package key below (fingerprint <code>710A D8AF B7AF E6E8 64C0 CDC4 E134 BAF3 7786 DA36</code>).</p>
+  <p>The assistant's model, optional: <a href="https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/bc640142c66e1fdd12af0bd68f40445458f3869b/Qwen3-4B-Q4_K_M.gguf">Qwen3-4B-Q4_K_M.gguf</a> (about 2.5 GB, from its publisher on Hugging Face; <a href="https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/bc640142c66e1fdd12af0bd68f40445458f3869b/LICENSE">Apache 2.0</a>). SHA-256:</p>
+  <pre><code>7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5</code></pre>
 </section>
 <section class="block">
   <h2>Add an agent</h2>

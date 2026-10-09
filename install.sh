@@ -82,8 +82,18 @@ EOF
     exit 2
 }
 
-# Test hook (tests/test-install-ca.sh): the CA check alone.
+# check_key FILE: FILE holds exactly one key, the pinned one. rpm --import and
+# apt's signed-by trust every key in the file they are given, so a second key
+# next to the real one must not get through.
+check_key() {
+    keys=$(gpg --batch --show-keys --with-colons "$1" 2>/dev/null | awk -F: '$1 == "pub" { n++ } $1 == "fpr" && !f { f = $10 } END { print n + 0, f }')
+    [ "${keys%% *}" -le 1 ] || die "the package key file holds ${keys%% *} keys; only $KEY_FINGERPRINT is expected"
+    got=${keys#* }
+    [ "$got" = "$KEY_FINGERPRINT" ] || die "the package key's fingerprint is ${got:-unreadable}, expected $KEY_FINGERPRINT"
+}
+# Test hooks (tests/test-install-ca.sh, tests/test-install-key.sh): one check alone.
 if [ "${1:-}" = --canonical-ca ]; then [ $# = 3 ] || usage; canonical_ca "$2" "$3"; exit 0; fi
+if [ "${1:-}" = --check-key ]; then [ $# = 2 ] || usage; check_key "$2"; exit 0; fi
 
 mode=platform platform='' token='' fp='' rules='' alarm_rules='' dport=''
 while [ $# -gt 0 ]; do
@@ -197,8 +207,7 @@ fi
 
 # The repository and its key.
 curl -fsSL "$SITE/openvibes.gpg" -o "$tmp/openvibes.gpg" || die "could not download $SITE/openvibes.gpg"
-got=$(gpg --batch --show-keys --with-colons "$tmp/openvibes.gpg" 2>/dev/null | awk -F: '$1 == "fpr" { print $10; exit }')
-[ "$got" = "$KEY_FINGERPRINT" ] || die "the package key's fingerprint is ${got:-unreadable}, expected $KEY_FINGERPRINT"
+check_key "$tmp/openvibes.gpg"
 case $family in
     rpm)
         # The agent RPM is the same file for every rpm system; EL's

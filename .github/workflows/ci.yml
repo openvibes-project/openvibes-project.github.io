@@ -16,7 +16,7 @@ jobs:
     container: registry.fedoraproject.org/fedora:44
     steps:
       - name: Install tools
-        run: dnf -q -y install git ShellCheck rpm-build rpm-sign gnupg2 createrepo_c dpkg-dev pacman bsdtar zstd
+        run: dnf -q -y install git ShellCheck rpm-build rpm-sign gnupg2 createrepo_c dpkg-dev pacman bsdtar zstd openssl
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -29,6 +29,10 @@ jobs:
           bash tests/test-check-site.sh
       - name: Publishing refuses unsigned packages and an unset key
         run: bash tests/test-build-repo.sh
+      - name: The installer trusts only the checked CA and the pinned key
+        run: |
+          bash tests/test-install-ca.sh
+          bash tests/test-install-key.sh
 
   install:
     name: Installer end to end (podman, systemd)

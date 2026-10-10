@@ -8,7 +8,9 @@
 #       installs the agent and enrolls it with that platform, trusting the
 #       platform's CA only if its SHA-256 fingerprint is FP.
 # Safer: download it, read it, then run: sudo sh install.sh [ARGS].
-# Fedora 44 on x86_64 only. Stops at the first failure and says what it did.
+# The platform: Fedora 44. Agents: Fedora 44, AlmaLinux and Rocky 9+,
+# Debian 12+, Ubuntu 22.04+ and Arch; x86_64 only. Stops at the first
+# failure and says what it did.
 set -eu
 
 # The OpenVIBES package key (gpg --show-keys openvibes.gpg).
@@ -26,16 +28,66 @@ die() {
     exit 1
 }
 say() { printf 'openvibes install: %s\n' "$1"; }
+# canonical_ca IN OUT: IN must hold exactly one PEM block, a CERTIFICATE; OUT is rebuilt
+# from that block's bytes alone, and its SHA-256 (of the DER) is printed. Whatever else
+# IN holds never reaches the trusted file: curl and OpenSSL also read other PEM forms
+# (e.g. TRUSTED CERTIFICATE), so checking one block and trusting the whole file would
+# let a man in the middle add a CA of their own next to the real one.
+canonical_ca() {
+    if ! { [ "$(grep -c -- '-----BEGIN ' "$1")" = 1 ] && [ "$(grep -c -- '-----END ' "$1")" = 1 ] &&
+        grep -qx -- '-----BEGIN CERTIFICATE-----' "$1" && grep -qx -- '-----END CERTIFICATE-----' "$1"; }; then
+        die "the platform's CA answer is not exactly one certificate"
+    fi
+    sed -n '/^-----BEGIN CERTIFICATE-----$/,/^-----END CERTIFICATE-----$/p' "$1" |
+        grep -v -- '-----' | tr -d '\r\n' | base64 -d > "$2.der" 2>/dev/null || die "the platform's CA is not valid base64"
+    [ -s "$2.der" ] || die "the platform's CA is empty"
+    { echo '-----BEGIN CERTIFICATE-----'; base64 -w 64 "$2.der"; echo '-----END CERTIFICATE-----'; } > "$2"
+    sha256sum "$2.der" | cut -d' ' -f1
+    rm -f "$2.der"
+}
 # install_package NAME: dnf installs it, its output kept in a log that is
 # shown only if it fails. dnf -q still prints every scriptlet's output
 # (">>> Running …"), which buried the next step (install walkthrough,
 # 2026-10-08).
 install_package() {
     say "installing $1 (a minute or two)"
-    dnf install -y "$1" > "$tmp/dnf.log" 2>&1 || {
-        tail -n 25 "$tmp/dnf.log" >&2
-        die "dnf could not install $1"
+    pkg=$1
+    case $family in
+        rpm) set -- dnf install -y "$pkg" ;;
+        deb) set -- env DEBIAN_FRONTEND=noninteractive apt-get install -y "$pkg" ;;
+        # -Syu: Arch supports no partial upgrades; refreshing the package lists
+        # without upgrading would leave the host's next pacman -S one.
+        arch) set -- pacman -Syu --noconfirm --needed "$pkg" ;;
+    esac
+    "$@" > "$tmp/install.log" 2>&1 || {
+        tail -n 25 "$tmp/install.log" >&2
+        die "the package manager could not install $pkg"
     }
+}
+# installed NAME: the package is installed, by this system's package manager.
+installed() {
+    case $family in
+        rpm) rpm -q --quiet "$1" ;;
+        deb) dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q 'install ok installed' ;;
+        arch) pacman -Q "$1" >/dev/null 2>&1 ;;
+    esac
+}
+# package_files NAME: the files the installed package owns.
+package_files() {
+    case $family in
+        rpm) rpm -ql "$1" ;;
+        deb) dpkg-query -L "$1" ;;
+        arch) pacman -Qlq "$1" ;;
+    esac
+}
+# put_file NEW DEST: install NEW at DEST, or keep DEST if it is the same;
+# a different DEST is someone's edit, not ours to overwrite.
+put_file() {
+    if [ -f "$2" ]; then
+        cmp -s "$1" "$2" || die "$2 differs from this installer's; check or remove it"
+    else
+        install -D -m 0644 "$1" "$2"
+    fi
 }
 
 usage() {
@@ -45,6 +97,48 @@ usage: install.sh                          install the platform's administration
 EOF
     exit 2
 }
+
+# check_key FILE: FILE holds exactly one key, the pinned one. rpm --import and
+# apt's signed-by trust every key in the file they are given, so a second key
+# next to the real one must not get through.
+check_key() {
+    keys=$(gpg --batch --show-keys --with-colons "$1" 2>/dev/null | awk -F: '$1 == "pub" { n++ } $1 == "fpr" && !f { f = $10 } END { print n + 0, f }')
+    [ "${keys%% *}" -le 1 ] || die "the package key file holds ${keys%% *} keys; only $KEY_FINGERPRINT is expected"
+    got=${keys#* }
+    [ "$got" = "$KEY_FINGERPRINT" ] || die "the package key's fingerprint is ${got:-unreadable}, expected $KEY_FINGERPRINT"
+}
+# pinned_key IN OUT: IN passes check_key; OUT is gpg's own export of the pinned
+# key alone. rpm, apt, pacman and dnf are given OUT, never IN: they parse key
+# files themselves, and anything they read that gpg did not would be trusted.
+pinned_key() {
+    check_key "$1"
+    pk_home=$(mktemp -d)
+    GNUPGHOME=$pk_home gpg --batch -q --import "$1" 2>/dev/null || :
+    GNUPGHOME=$pk_home gpg --batch -q --armor --export-options export-minimal --export "$KEY_FINGERPRINT" > "$2" 2>/dev/null || :
+    gpgconf --homedir "$pk_home" --kill all 2>/dev/null || :
+    rm -rf "$pk_home"
+    [ -s "$2" ] || die "could not export the package key $KEY_FINGERPRINT"
+    check_key "$2"
+}
+# pacman_section CONF: CONF gets the [openvibes] section, or already has
+# exactly the installer's one (its lines, comments and blanks aside): an
+# existing section with another SigLevel or Server is someone else's.
+pacman_section() {
+    # shellcheck disable=SC2016  # pacman expands $arch
+    ps_want=$(printf 'SigLevel = Required DatabaseRequired\nServer = %s/arch/$arch' "$SITE")
+    if grep -q '^\[openvibes\]' "$1"; then
+        ps_have=$(awk '/^\[/ { in_s = ($0 == "[openvibes]"); next } in_s && NF && !/^[[:space:]]*#/' "$1")
+        [ "$ps_have" = "$ps_want" ] ||
+            die "$1 has an [openvibes] section that differs from this installer's; check or remove it"
+    else
+        printf '\n[openvibes]\n%s\n' "$ps_want" >> "$1"
+    fi
+}
+# Test hooks (tests/test-install-ca.sh, tests/test-install-key.sh,
+# tests/test-install-pacman.sh): one step alone.
+if [ "${1:-}" = --canonical-ca ]; then [ $# = 3 ] || usage; canonical_ca "$2" "$3"; exit 0; fi
+if [ "${1:-}" = --pinned-key ]; then [ $# = 3 ] || usage; pinned_key "$2" "$3"; exit 0; fi
+if [ "${1:-}" = --pacman-section ]; then [ $# = 2 ] || usage; pacman_section "$2"; exit 0; fi
 
 mode=platform platform='' token='' fp='' rules='' alarm_rules='' dport=''
 while [ $# -gt 0 ]; do
@@ -68,8 +162,18 @@ done
 os_id=$(. /etc/os-release && printf %s "$ID")
 # shellcheck source=/dev/null
 os_version=$(. /etc/os-release && printf %s "${VERSION_ID:-}")
-[ "$os_id" = fedora ] && [ "$os_version" = 44 ] && [ "$(uname -m)" = x86_64 ] ||
-    die "OpenVIBES packages are for Fedora 44 on x86_64 (this is $os_id $os_version $(uname -m))"
+major=${os_version%%.*} family=''
+case $os_id in
+    fedora) [ "$os_version" = 44 ] && family=rpm ;;
+    almalinux|rocky) [ "${major:-0}" -ge 9 ] 2>/dev/null && family=rpm ;;
+    debian) [ "${major:-0}" -ge 12 ] 2>/dev/null && family=deb ;;
+    ubuntu) [ "${major:-0}" -ge 22 ] 2>/dev/null && family=deb ;;
+    arch) family=arch ;;
+esac
+[ "$(uname -m)" = x86_64 ] && [ -n "$family" ] ||
+    die "OpenVIBES agent packages are for Fedora 44, AlmaLinux and Rocky 9+, Debian 12+, Ubuntu 22.04+ and Arch on x86_64 (this is $os_id $os_version $(uname -m))"
+[ "$mode" = agent ] || { [ "$os_id" = fedora ] && [ "$os_version" = 44 ]; } ||
+    die "the OpenVIBES platform is for Fedora 44 on x86_64 (this is $os_id $os_version)"
 
 if [ "$mode" = agent ]; then
     [ -n "$platform" ] && [ -n "$token" ] && [ -n "$fp" ] || usage
@@ -136,33 +240,67 @@ fi
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
-# gpg checks the package key; minimal images may not have it (Fedora's
-# own repositories provide it).
-command -v gpg >/dev/null 2>&1 || dnf install -y -q gnupg2 >/dev/null || die "could not install gnupg2"
+# gpg checks the package key; minimal images may not have it (the
+# system's own repositories provide it; Arch always has it).
+if ! command -v gpg >/dev/null 2>&1; then
+    case $family in
+        rpm) dnf install -y -q gnupg2 >/dev/null ;;
+        deb) { apt-get update -q && DEBIAN_FRONTEND=noninteractive apt-get install -y -q gnupg; } >/dev/null ;;
+        arch) false ;;
+    esac || die "could not install gnupg"
+fi
 
 # The repository and its key.
 curl -fsSL "$SITE/openvibes.gpg" -o "$tmp/openvibes.gpg" || die "could not download $SITE/openvibes.gpg"
-got=$(gpg --batch --show-keys --with-colons "$tmp/openvibes.gpg" 2>/dev/null | awk -F: '$1 == "fpr" { print $10; exit }')
-[ "$got" = "$KEY_FINGERPRINT" ] || die "the package key's fingerprint is ${got:-unreadable}, expected $KEY_FINGERPRINT"
-cat > "$tmp/openvibes.repo" <<EOF
+pinned_key "$tmp/openvibes.gpg" "$tmp/pinned.asc"
+case $family in
+    rpm)
+        # The agent RPM is the same file for every rpm system; EL's
+        # $releasever would be 9 or 10.
+        # ponytail: EL reads the Fedora 44 folder; give the agent its own rpm folder if the RPMs ever differ.
+        # shellcheck disable=SC2016  # dnf expands $releasever
+        release='$releasever'
+        [ "$os_id" = fedora ] || release=44
+        # gpgkey is the checked export on disk: with the website's URL, dnf
+        # would fetch and trust the raw file itself.
+        # Ours, always rewritten with the checked export (a renewed key must get through).
+        install -D -m 0644 "$tmp/pinned.asc" /etc/pki/rpm-gpg/RPM-GPG-KEY-openvibes
+        repo_file() { # GPGKEY OUT
+            cat > "$2" <<EOF
 [openvibes]
 name=OpenVIBES
-baseurl=$SITE/rpm/fedora/\$releasever/\$basearch/
+baseurl=$SITE/rpm/fedora/$release/\$basearch/
 enabled=1
 gpgcheck=1
 repo_gpgcheck=1
-gpgkey=$SITE/openvibes.gpg
+gpgkey=$1
 EOF
-if [ -f /etc/yum.repos.d/openvibes.repo ]; then
-    cmp -s "$tmp/openvibes.repo" /etc/yum.repos.d/openvibes.repo ||
-        die "/etc/yum.repos.d/openvibes.repo differs from this installer's; check or remove it"
-else
-    install -m 0644 "$tmp/openvibes.repo" /etc/yum.repos.d/openvibes.repo
-fi
-rpm --import "$tmp/openvibes.gpg"
-# dnf keeps a repository index for up to 48 h; one cached before a release
-# does not list the new packages.
-dnf makecache -y -q --refresh --repo openvibes >/dev/null || die "could not load the OpenVIBES repository index"
+        }
+        repo_file file:///etc/pki/rpm-gpg/RPM-GPG-KEY-openvibes "$tmp/openvibes.repo"
+        repo_file "$SITE/openvibes.gpg" "$tmp/openvibes.repo.old"
+        # Installers before 2026-10-09 wrote gpgkey=$SITE/openvibes.gpg: that exact
+        # file is ours to replace; any other edit is refused by put_file.
+        if [ -f /etc/yum.repos.d/openvibes.repo ] && cmp -s "$tmp/openvibes.repo.old" /etc/yum.repos.d/openvibes.repo; then
+            install -m 0644 "$tmp/openvibes.repo" /etc/yum.repos.d/openvibes.repo
+        fi
+        put_file "$tmp/openvibes.repo" /etc/yum.repos.d/openvibes.repo
+        rpm --import "$tmp/pinned.asc"
+        # dnf keeps a repository index for up to 48 h; one cached before a release
+        # does not list the new packages.
+        dnf makecache -y -q --refresh --repo openvibes >/dev/null || die "could not load the OpenVIBES repository index" ;;
+    deb)
+        # A flat repository; apt reads the armoured key from signed-by (apt 2.4+).
+        install -D -m 0644 "$tmp/pinned.asc" /etc/apt/keyrings/openvibes.asc   # ours, always the checked export
+        echo "deb [signed-by=/etc/apt/keyrings/openvibes.asc] $SITE/deb ./" > "$tmp/openvibes.list"
+        put_file "$tmp/openvibes.list" /etc/apt/sources.list.d/openvibes.list
+        apt-get update -q -o Dir::Etc::sourcelist=sources.list.d/openvibes.list \
+            -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0 >/dev/null ||
+            die "could not load the OpenVIBES repository index" ;;
+    arch)
+        { pacman-key --add "$tmp/pinned.asc" && pacman-key --lsign-key "$KEY_FINGERPRINT"; } >/dev/null 2>&1 ||
+            die "could not add the package key to pacman's keyring"
+        pacman_section /etc/pacman.conf ;;
+esac
 done_so_far="repository added"
 
 if [ "$mode" = platform ]; then
@@ -191,13 +329,19 @@ fi
 url=https://$host:$port
 curl -fsS --insecure --max-time 10 "$url/v1/ca" -o "$tmp/ca.pem" ||
     die "could not fetch the platform's CA from $url/v1/ca (is Setup finished there?)"
-ca=$(sed -n '/-----BEGIN CERTIFICATE-----/,/-----END CERTIFICATE-----/p' "$tmp/ca.pem" |
-    grep -v -- ----- | tr -d '\r\n' | base64 -d 2>/dev/null | sha256sum | cut -d' ' -f1)
+ca=$(canonical_ca "$tmp/ca.pem" "$tmp/ca-trusted.pem") || exit 1
 [ "$ca" = "$fp" ] || die "the platform's CA has fingerprint $ca, not the expected $fp"
-curl -fsS --cacert "$tmp/ca.pem" --max-time 10 "$url/v1/ca" -o /dev/null ||
+curl -fsS --cacert "$tmp/ca-trusted.pem" --max-time 10 "$url/v1/ca" -o /dev/null ||
     die "the server at $url does not hold a certificate from that CA"
 
-install_package openvibes-agent
+# An agent package already installed (an image, the lab's own build, a
+# pinned version) is kept: apt and pacman would replace it with the
+# repository's newest, which dnf install never does.
+if installed openvibes-agent; then
+    say "openvibes-agent is already installed; configuring it"
+else
+    install_package openvibes-agent
+fi
 done_so_far="openvibes-agent installed, not configured"
 platform_url=https://$host
 [ "$port" = 18423 ] || platform_url=$url
@@ -224,7 +368,10 @@ elif [ -n "$alarm_rules" ]; then
     # file list, so a nodocs install counts too). An older agent would
     # refuse the name; without this list its own default applies.
     services=''
-    if rpm -ql openvibes-agent 2>/dev/null | grep -q '/owners\.conf$'; then
+    # Two markers: the owners.conf drop-in (P15 agents up to 0.2.5) and the
+    # root-facts helper that replaced it (decisions.md 2026-10-09).
+    if package_files openvibes-agent 2>/dev/null |
+        grep -qE '/owners\.conf$|^/usr/libexec/openvibes-agent/openvibes-agent-facts$'; then
         services=', "services"'
     fi
     cat >> "$tmp/agent.toml" <<EOF
@@ -258,7 +405,7 @@ trusted_keys = [{ issuer_key_id = "$alarm_issuer", public_key = "$alarm_key" }]
 EOF
 fi
 (umask 077 && printf '%s\n' "$token" > "$tmp/token")
-install -m 0644 "$tmp/ca.pem" "$AGENT_DIR/platform-ca.crt"
+install -m 0644 "$tmp/ca-trusted.pem" "$AGENT_DIR/platform-ca.crt"
 install -o openvibes_agent -g openvibes_agent -m 0600 "$tmp/token" "$AGENT_DIR/token"
 install -o root -g openvibes_agent -m 0640 "$tmp/agent.toml" "$AGENT_DIR/agent.toml"
 done_so_far="openvibes-agent installed and configured"

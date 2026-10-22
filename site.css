@@ -62,6 +62,7 @@ h2 { font-size: 29px; color: var(--strong); margin: 0 0 8px; }
 .tile h3, .box h3 { color: var(--strong); display: block; margin: 0 0 4px; font-size: 16px; }
 .tile span { color: var(--muted); font-size: 15px; }
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 20px; }
+.box ul + h3 { margin-top: 16px; }
 .box li { color: var(--muted); font-size: 15px; margin: 4px 0; }
 .steps { list-style: none; padding: 0; margin: 20px 0 0; display: grid; gap: 14px; }
 .step { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 12px; }

@@ -1,4 +1,18 @@
-# openvibes-project.github.io
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/wordmark-dark.svg">
+    <img src="assets/wordmark-light.svg" alt="OpenVIBES" width="560">
+  </picture>
+</p>
+
+<h3 align="center">OpenVIBES website and packages</h3>
+
+<p align="center">
+  The website, the signed package repositories (RPM, apt, pacman) and the
+  installer, published at <a href="https://openvibes-project.github.io/">openvibes-project.github.io</a>.
+</p>
+
+---
 
 The OpenVIBES package repository and installer, published at
 <https://openvibes-project.github.io/>:

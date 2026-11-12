@@ -25,7 +25,7 @@
         <li><a href="https://github.com/openvibes-project">GitHub</a></li>
       </ul>
     </nav>
-    <span class="pill">Early release 0.2 · free and open source (Apache 2.0)</span>
+    <span class="pill">Release 0.3 · free and open source (Apache 2.0)</span>
     <h1>See what runs on your machines, and what threatens them.</h1>
     <p class="lead">A light, self-hosted security platform for homelabs and small businesses: vulnerabilities, compliance, threat alarms and an optional AI assistant that runs on your platform, in one fast console.</p>
     <div class="btns">
@@ -34,7 +34,7 @@
       <span class="note">Free · self-hosted · platform on Fedora 44</span>
     </div>
     <div class="frame"><div class="bar" aria-hidden="true"><i></i><i></i><i></i></div>
-      <img class="screen" src="assets/dashboard.webp" width="1414" height="788" alt="The OpenVIBES console's dashboard: active alarms, critical and high findings and exploited vulnerabilities with their trends, what needs attention first, and the most exposed hosts.">
+      <img class="screen" src="assets/dashboard.webp" width="1414" height="788" alt="The OpenVIBES console's dashboard: active alarms, critical and high findings and exploited vulnerabilities with their trends, what needs attention first, findings by severity and the most exposed hosts.">
     </div>
   </div>
 </header>
@@ -48,19 +48,19 @@
     <h3>Know what's vulnerable</h3>
     <p>Every host reports its installed software. OpenVIBES matches it against the distributions' own security advisories and puts known-exploited vulnerabilities first.</p>
     <ul><li>Fedora, Debian, Ubuntu, Rocky Linux and AlmaLinux advisories</li><li>Software, open ports and services per host</li></ul>
-  </div><div class="shot"><img class="screen" src="assets/vulnerabilities.webp" width="1414" height="788" loading="lazy" alt="The Vulnerabilities view: security advisories with their severity, CVSS and EPSS scores, known-exploited markers and the number of affected hosts."></div></div>
+  </div><div class="shot"><img class="screen" src="assets/vulnerabilities.webp" width="1414" height="788" loading="lazy" alt="The Vulnerabilities list: one row per CVE with its severity, package and fixed version, CVSS and EPSS scores, known-exploited markers, open hosts and due dates."></div></div>
 
   <div class="feat rev"><div class="txt">
     <h3>Check your baseline</h3>
-    <p>Signed compliance rules run on every host. The baseline flags services exposed to the network, such as the Docker API, Redis or a database, and risky servers like Telnet and rsh. Write your own rules and sign them on your platform.</p>
-    <ul><li>Baseline rules included</li><li>Your own rules, your own signing key</li></ul>
-  </div><div class="shot"><img class="screen" src="assets/compliance.webp" width="1414" height="788" loading="lazy" alt="The Compliance view: baseline findings such as an exposed Docker API, MongoDB or Redis, by severity, with how many hosts each affects and their triage."></div></div>
+    <p>Signed rules run on every host. The baseline flags services exposed to the network, such as the Docker API, Redis or a database, and risky servers like Telnet and rsh. Linux hardening checks sshd, kernel settings, file permissions, mounts and more. Write your own rules and sign them on your platform.</p>
+    <ul><li>Baseline and Linux hardening rules included</li><li>Choose which host groups run which rules</li><li>Your own rules, your own signing key</li></ul>
+  </div><div class="shot"><img class="screen" src="assets/compliance.webp" width="1414" height="788" loading="lazy" alt="The Compliance list: one row per failing check, such as an exposed Docker API, an account with an empty password or SSH allowing root to log in with a password, with how many hosts fail it."></div></div>
 
   <div class="feat"><div class="txt">
     <h3>Hear about threats in seconds</h3>
     <p>The agent watches every program start, with eBPF and kernel audit as the fallback. A web server starting a shell is in your console seconds later, with why the rule fired and the process tree.</p>
-    <ul><li>Built-in rules, e.g. a web or database server starting a shell</li><li>Quiet by default; suppress what is normal for you</li><li>Triage, cases and an audit trail</li></ul>
-  </div><div class="shot"><img class="screen" src="assets/alarm.webp" width="1414" height="788" loading="lazy" alt="An alarm, 'A web server started a shell', with the condition that matched and the values seen."></div></div>
+    <ul><li>Built-in rules, e.g. a web or database server starting a shell, each mapped to MITRE ATT&amp;CK</li><li>Quiet by default; suppress what is normal for you, with a second person's approval if you want it</li><li>Triage, cases and an audit trail</li></ul>
+  </div><div class="shot"><img class="screen" src="assets/alarm.webp" width="1414" height="788" loading="lazy" alt="The Alarms list: a web server or a database server that started a shell, and a shell that downloaded a program and ran it, each with its host, MITRE ATT&amp;CK techniques, count and state."></div></div>
 
   <div class="feat rev"><div class="txt">
     <h3>Ask in plain words</h3>
@@ -84,24 +84,25 @@
 
 <section class="block"><div class="wrap">
   <div class="kicker">Where it stands</div>
-  <h2>An early release, moving fast</h2>
+  <h2>Young, and moving fast</h2>
   <div class="two">
     <div class="box"><h3>Runs on today</h3><ul>
       <li>Platform: Fedora 44 (x86_64), online or with no internet at all (<a href="packages.html#offline">offline kit</a>), 2 GB RAM and 1 vCPU: in the lab that size served 500 simulated agents without swapping</li>
       <li>Agents: Fedora 44, AlmaLinux and Rocky Linux 9+, Debian 12+, Ubuntu 22.04+ and Arch (x86_64), each from its own signed package, installed with the command the console gives you</li>
+      <li>Windows agent (preview): Windows 10 and 11, Windows Server 2016 to 2025; software inventory for now</li>
       <li>Threat alarms from eBPF on Linux 5.8 and later (kernel audit as the fallback)</li>
-      <li>Vulnerability data for Fedora, Debian, Ubuntu, Rocky Linux and AlmaLinux hosts</li>
+      <li>Vulnerability data for Fedora, Debian, Ubuntu, Rocky Linux and AlmaLinux hosts, also without internet, from a mirror or a file</li>
     </ul></div>
-    <div class="box"><h3>Coming in 0.3</h3><ul>
-      <li>A rebuilt admin menu on the platform host: guided install, update with a backup first, repair, certificates and optional parts</li>
-      <li>Roles and permissions: your own roles, host groups and labels, and suppressions that need a second person's approval</li>
-      <li>Linux hardening checks (sshd, sysctls, file modes, mounts and more), switched on per host group</li>
-      <li>New list and detail pages with saved views, starting with Hosts and Alarms</li>
-    </ul><h3>After that</h3><ul>
+    <div class="box"><h3>New in 0.3</h3><ul>
+      <li>Roles and people: your own roles, host groups and labels, and single sign-on through SAML</li>
+      <li>Linux hardening checks on every host, switched per host group</li>
+      <li>A list and a page for everything: hosts, alarms, vulnerabilities, compliance, software, ports, services and cases, with saved views</li>
+      <li>A finished admin menu on the platform host: guided install, updates with a backup first, repair and certificates that renew themselves</li>
+    </ul><h3>Next</h3><ul>
+      <li>Fully offline agent install from the console (0.3.1)</li>
       <li>Alarms from your UniFi gateway's IPS/IDS, set up in the console</li>
-      <li>Fully offline agent install from the console</li>
+      <li>Windows: ports, services, threat alarms and vulnerability matching</li>
       <li>Platform on AlmaLinux and Rocky Linux</li>
-      <li>Windows agent</li>
     </ul></div>
   </div>
 </div></section>
@@ -112,8 +113,8 @@
   <ol class="steps">
     <li class="step"><span class="n" aria-hidden="true">1</span><div><b>Install the platform</b> on a Fedora 44 host, as your own user:
       <pre><code>sudo sh -c "$(curl -fsSL https://openvibes-project.github.io/install.sh)"</code></pre></div></li>
-    <li class="step"><span class="n" aria-hidden="true">2</span><div><b>Run Setup.</b> It opens by itself: enter the host name others will use, press Start, and write down the admin password it shows once.</div></li>
-    <li class="step"><span class="n" aria-hidden="true">3</span><div><b>Add hosts</b> from the console: Enrollment → Add a host → Copy CLI install, then paste it into a root shell on each host.</div></li>
+    <li class="step"><span class="n" aria-hidden="true">2</span><div><b>Install.</b> The admin menu opens by itself: choose Quick install, enter the host name your other hosts will use, choose Install, and write down the admin password it shows at the end.</div></li>
+    <li class="step"><span class="n" aria-hidden="true">3</span><div><b>Add hosts</b> from the console: Settings › Enrollment › Add a host gives you a command to run as root on each Linux host, and an install line for Windows.</div></li>
   </ol>
   <p class="note">Full walkthrough: the <a href="https://github.com/openvibes-project/openvibes-platform/blob/main/docs/quick-setup.md">quick setup guide</a>. Prefer to read the script first? Download <a href="install.sh">install.sh</a>, read it, then run <code>sudo sh install.sh</code>. No output at all means the download failed. Package repository and signing key: <a href="packages.html">Packages</a>.</p>
 </div></section>

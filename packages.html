@@ -25,8 +25,8 @@
 <section class="block">
   <h2>Install the platform</h2>
   <pre><code>sudo sh -c "$(curl -fsSL https://openvibes-project.github.io/install.sh)"</code></pre>
-  <p>It adds this repository, installs the administration tool and opens its Setup. No output at all means the download failed: check your connection and run it again. Safer: download <a href="install.sh">install.sh</a>, read it, then run <code>sudo sh install.sh</code>.</p>
-  <p>In Setup, choose the assistant and answer <b>Y</b> to download the model. To add it later, turn the assistant on in Setup: it downloads the model itself.</p>
+  <p>It adds this repository, installs the administration tool and opens its Install screens. No output at all means the download failed: check your connection and run it again. Safer: download <a href="install.sh">install.sh</a>, read it, then run <code>sudo sh install.sh</code>.</p>
+  <p>For the assistant, tick it under Optional in Choose what to install: the install downloads the model. To add it later: <code>sudo openvibes-admin</code>, then Maintenance › Optional parts.</p>
 </section>
 <section class="block" id="offline">
   <h2>Install without internet</h2>
@@ -42,7 +42,7 @@
 </section>
 <section class="block">
   <h2>Add an agent</h2>
-  <p>In the console: Enrollment → Add a host, then Copy CLI install or Install package. On the platform host, <code>sudo openvibes-admin agent command</code> prints the same command.</p>
+  <p>In the console: Settings › Enrollment › Add a host, then the install command or Install package (Linux), or the Windows line. On the platform host, <code>sudo openvibes-admin agent command</code> prints the same command.</p>
 </section>
 <section class="block">
   <h2>The repositories</h2>

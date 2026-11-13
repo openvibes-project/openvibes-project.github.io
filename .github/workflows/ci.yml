@@ -48,13 +48,21 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          latest() { gh run list -R "openvibes-project/$1" --workflow CI --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId'; }
-          gh run download "$(latest openvibes-platform)" -R openvibes-project/openvibes-platform -n rpms -D rpms/platform
-          agent_run=$(latest openvibes-agent)
+          # The newest green CI run on main that still has artifact $2: a
+          # docs-only merge makes a green run with no packages.
+          latest() {
+            gh api "repos/openvibes-project/$1/actions/artifacts?name=$2&per_page=30" \
+              --jq '.artifacts[] | select(.expired | not) | select(.workflow_run.head_branch == "main") | .workflow_run.id' |
+              while read -r id; do
+                [ "$(gh api "repos/openvibes-project/$1/actions/runs/$id" --jq .conclusion)" = success ] && { echo "$id"; break; }
+              done
+          }
+          gh run download "$(latest openvibes-platform rpms)" -R openvibes-project/openvibes-platform -n rpms -D rpms/platform
+          agent_run=$(latest openvibes-agent agent-rpms)
           gh run download "$agent_run" -R openvibes-project/openvibes-agent -n agent-rpms -D rpms/agent
           gh run download "$agent_run" -R openvibes-project/openvibes-agent -n agent-debs -D rpms/agent
           gh run download "$agent_run" -R openvibes-project/openvibes-agent -n agent-arch -D rpms/agent
-          gh run download "$(latest openvibes-rules)" -R openvibes-project/openvibes-rules -n rules-rpms -D rpms/rules
+          gh run download "$(latest openvibes-rules rules-rpms)" -R openvibes-project/openvibes-rules -n rules-rpms -D rpms/rules
           mkdir rpms/all
           cp rpms/platform/openvibes-{ingest,distribution,vulns,admin}-[0-9]*.x86_64.rpm rpms/all/
           # The lowest version of each: CI also builds a next-patch test package.

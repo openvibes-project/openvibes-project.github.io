@@ -25,7 +25,7 @@
         <li><a href="https://github.com/openvibes-project">GitHub</a></li>
       </ul>
     </nav>
-    <span class="pill">Early release 0.2 · free and open source (Apache 2.0)</span>
+    <span class="pill">Early release 0.3 · free and open source (Apache 2.0)</span>
     <h1>See what runs on your machines, and what threatens them.</h1>
     <p class="lead">A light, self-hosted security platform for homelabs and small businesses: vulnerabilities, compliance, threat alarms and an optional AI assistant that runs on your platform, in one fast console.</p>
     <div class="btns">
@@ -89,19 +89,21 @@
     <div class="box"><h3>Runs on today</h3><ul>
       <li>Platform: Fedora 44 (x86_64), online or with no internet at all (<a href="packages.html#offline">offline kit</a>), 2 GB RAM and 1 vCPU: in the lab that size served 500 simulated agents without swapping</li>
       <li>Agents: Fedora 44, AlmaLinux and Rocky Linux 9+, Debian 12+, Ubuntu 22.04+ and Arch (x86_64), each from its own signed package, installed with the command the console gives you</li>
+      <li>Windows agent as a preview: Windows 10 22H2 and 11, and Windows Server 2016 to 2025, for inventory (processes, installed programs, the Windows version)</li>
       <li>Threat alarms from eBPF on Linux 5.8 and later (kernel audit as the fallback)</li>
       <li>Vulnerability data for Fedora, Debian, Ubuntu, Rocky Linux and AlmaLinux hosts</li>
     </ul></div>
-    <div class="box"><h3>Coming in 0.3</h3><ul>
+    <div class="box"><h3>New in 0.3</h3><ul>
+      <li>Roles and people: your own roles, host groups and labels, single sign-on through SAML, and alarm suppressions that need a second person's approval</li>
+      <li>Linux hardening checks (sshd, sysctls, file modes, mounts and more) on every Linux host by default, switched off per host group if you like</li>
+      <li>A list and a page for hosts, alarms, vulnerabilities, compliance, cases, ports, services and software, with filters and saved views</li>
+      <li>Vulnerability data for networks with no internet, from a signed feed you build on a machine that has it</li>
       <li>A rebuilt admin menu on the platform host: guided install, update with a backup first, repair, certificates and optional parts</li>
-      <li>Roles and permissions: your own roles, host groups and labels, and suppressions that need a second person's approval</li>
-      <li>Linux hardening checks (sshd, sysctls, file modes, mounts and more), switched on per host group</li>
-      <li>New list and detail pages with saved views, starting with Hosts and Alarms</li>
     </ul><h3>After that</h3><ul>
       <li>Alarms from your UniFi gateway's IPS/IDS, set up in the console</li>
       <li>Fully offline agent install from the console</li>
       <li>Platform on AlmaLinux and Rocky Linux</li>
-      <li>Windows agent</li>
+      <li>Threat alarms, vulnerability data and rules for Windows agents</li>
     </ul></div>
   </div>
 </div></section>

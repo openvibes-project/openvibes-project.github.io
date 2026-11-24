@@ -8,15 +8,15 @@
 #      through its --rules and --alarm-rules, the agent gets the threat
 #      alarm collector (process_events) and fetches and accepts both the
 #      baseline and the baseline alarm rules (P14);
-#   2a. the same line enrolls agents on Debian 12, Ubuntu 22.04, Arch and
-#      AlmaLinux 9 from the test apt, pacman and dnf repositories, and each
+#   2a. the same line enrolls agents on Debian 12, Ubuntu 22.04, Arch,
+#      AlmaLinux 9 and Fedora 45 from the test apt, pacman and dnf repositories, and each
 #      accepts the baseline rule set;
 #   2b. a Repair moves distribution (--move-agent-ports); an agent from the
 #      new line (--distribution-port) accepts the baseline there;
 #   3. refusals, each leaving no agent package behind: a wrong package-key
 #      fingerprint, a wrong CA fingerprint, a server whose certificate is
 #      not from the CA it serves, Fedora 43 and Debian 11 agents, the
-#      platform on Debian 12, and an agent that is already configured (its
+#      platform on Debian 12 and Fedora 45, and an agent that is already configured (its
 #      agent.toml unchanged).
 # Usage: tests/install-e2e.sh PKG_DIR
 #   PKG_DIR  openvibes-{ingest,distribution,vulns,admin}-*.rpm, one
@@ -33,7 +33,7 @@ IMAGE=ov-install-e2e:44
 fail() { echo "FAIL: $*" >&2; exit 1; }
 ok() { echo "ok: $*"; }
 in_c() { "$PODMAN" exec "$1" bash -c "$2"; }
-names=(repo platform agent agent2 agent3 platform2 f43 debian11 debplatform agent-debian agent-ubuntu agent-arch agent-alma)
+names=(repo platform agent agent2 agent3 platform2 f43 debian11 debplatform agent-debian agent-ubuntu agent-arch agent-alma agent-fedora45 f45platform)
 cleanup() {
     local status=$?
     if ((status != 0)); then
@@ -205,12 +205,13 @@ other_image() { # BASE PREP: BASE with systemd and PREP, our MAC policy, printed
 }
 apt_prep='apt-get update -q && DEBIAN_FRONTEND=noninteractive apt-get install -y -q systemd dbus curl ca-certificates procps && apt-get clean'
 for system in debian=docker.io/library/debian:12 ubuntu=docker.io/library/ubuntu:22.04 \
-    arch=docker.io/library/archlinux:latest alma=docker.io/library/almalinux:9; do
+    arch=docker.io/library/archlinux:latest alma=docker.io/library/almalinux:9 \
+    fedora45=registry.fedoraproject.org/fedora:45; do
     name=agent-${system%%=*} base=${system#*=}
     case ${system%%=*} in
         debian | ubuntu) prep=$apt_prep ;;
         arch) prep='pacman -Syu --noconfirm --needed procps-ng && pacman-key --init && pacman-key --populate archlinux' ;;
-        alma) prep='dnf -q -y install systemd procps-ng && dnf clean all' ;;
+        alma | fedora45) prep='dnf -q -y install systemd procps-ng && dnf clean all' ;;
     esac
     systemd_container "$name" "$(other_image "$base" "$prep")" /usr/lib/systemd/systemd
     line=$(in_c platform 'runuser -u openvibes-admin -- openvibes-admin agent command --platform platform' | head -1)
@@ -297,11 +298,11 @@ refused "a server whose certificate is not from that CA" "does not hold a certif
     "$ENV sh /test/install.sh --agent --platform platform2 --token $TOKEN --ca-sha256 $FP"
 # Systems with no agent package, and the platform anywhere but Fedora 44.
 for case in "f43 registry.fedoraproject.org/fedora:43 agent" "debian11 docker.io/library/debian:11 agent" \
-    "debplatform docker.io/library/debian:12 platform"; do
+    "debplatform docker.io/library/debian:12 platform" "f45platform registry.fedoraproject.org/fedora:45 platform"; do
     read -r name image what <<<"$case"
     "$PODMAN" run -d --name "$name" --network "$NET" -v "$W:/test:z" "$image" sleep infinity >/dev/null
     if [[ $what == agent ]]; then
-        args=$ARGS want="OpenVIBES agent packages are for Fedora 44, AlmaLinux and Rocky 9+"
+        args=$ARGS want="OpenVIBES agent packages are for Fedora 44 and 45, AlmaLinux and Rocky 9+"
     else
         args="" want="the OpenVIBES platform is for Fedora 44"
     fi

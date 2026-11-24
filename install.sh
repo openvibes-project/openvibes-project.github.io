@@ -8,7 +8,7 @@
 #       installs the agent and enrolls it with that platform, trusting the
 #       platform's CA only if its SHA-256 fingerprint is FP.
 # Safer: download it, read it, then run: sudo sh install.sh [ARGS].
-# The platform: Fedora 44. Agents: Fedora 44, AlmaLinux and Rocky 9+,
+# The platform: Fedora 44. Agents: Fedora 44 and 45, AlmaLinux and Rocky 9+,
 # Debian 12+, Ubuntu 22.04+ and Arch; x86_64 only. Stops at the first
 # failure and says what it did.
 set -eu
@@ -164,14 +164,14 @@ os_id=$(. /etc/os-release && printf %s "$ID")
 os_version=$(. /etc/os-release && printf %s "${VERSION_ID:-}")
 major=${os_version%%.*} family=''
 case $os_id in
-    fedora) [ "$os_version" = 44 ] && family=rpm ;;
+    fedora) case $os_version in 44|45) family=rpm ;; esac ;;
     almalinux|rocky) [ "${major:-0}" -ge 9 ] 2>/dev/null && family=rpm ;;
     debian) [ "${major:-0}" -ge 12 ] 2>/dev/null && family=deb ;;
     ubuntu) [ "${major:-0}" -ge 22 ] 2>/dev/null && family=deb ;;
     arch) family=arch ;;
 esac
 [ "$(uname -m)" = x86_64 ] && [ -n "$family" ] ||
-    die "OpenVIBES agent packages are for Fedora 44, AlmaLinux and Rocky 9+, Debian 12+, Ubuntu 22.04+ and Arch on x86_64 (this is $os_id $os_version $(uname -m))"
+    die "OpenVIBES agent packages are for Fedora 44 and 45, AlmaLinux and Rocky 9+, Debian 12+, Ubuntu 22.04+ and Arch on x86_64 (this is $os_id $os_version $(uname -m))"
 [ "$mode" = agent ] || { [ "$os_id" = fedora ] && [ "$os_version" = 44 ]; } ||
     die "the OpenVIBES platform is for Fedora 44 on x86_64 (this is $os_id $os_version)"
 

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Builds the site in SITE from the released packages already collected
 # (scripts/collect.sh): RPMs in SITE/rpm/fedora/44/x86_64, .debs in
-# SITE/deb, Arch packages in SITE/arch/x86_64, each .deb and Arch package
+# SITE/deb, Arch packages in SITE/arch/x86_64 (the agent RPMs are copied to
+# SITE/rpm/fedora/45/x86_64), each .deb and Arch package
 # with its detached .sig. Every package must be signed by PUBKEY (RPMs inside,
 # the others by their .sig); each repository's metadata is
 # indexed and signed (dnf repomd.xml.asc, apt InRelease, pacman
@@ -13,6 +14,7 @@ set -euo pipefail
 [[ $# == 2 ]] || { echo "usage: $0 SITE PUBKEY" >&2; exit 2; }
 site=$1 pubkey=$2
 repo=$site/rpm/fedora/44/x86_64
+repo45=$site/rpm/fedora/45/x86_64
 here=$(cd "$(dirname "$0")" && pwd)
 if grep -q '^KEY_FINGERPRINT=unset$' install.sh; then
     echo "build-repo: install.sh has no package key fingerprint" >&2; exit 1
@@ -30,13 +32,21 @@ done
 if ((${#rpms[@]})); then
     bash "$here/sign-rpms.sh" --check-only "$repo" "$pubkey"
 fi
-createrepo_c --quiet "$repo"
+# Fedora 45 gets the agent (the same RPM), not the platform. Copies, not
+# symlinks: Pages may not keep those.
+mkdir -p "$repo45"
+for f in "${rpms[@]}"; do
+    case ${f##*/} in openvibes-agent-[0-9]*) cp "$f" "$repo45/" ;; esac
+done
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 export GNUPGHOME=$T/gnupg; mkdir -m 0700 "$GNUPGHOME"
 printf '%s' "$RPM_SIGNING_KEY" | gpg --batch --quiet --import
 printf '%s' "$RPM_SIGNING_PASSPHRASE" > "$T/pass"; chmod 0600 "$T/pass"
-gpg --batch --yes --pinentry-mode loopback --passphrase-file "$T/pass" \
-    --detach-sign --armor --output "$repo/repodata/repomd.xml.asc" "$repo/repodata/repomd.xml"
+for r in "$repo" "$repo45"; do
+    createrepo_c --quiet "$r"
+    gpg --batch --yes --pinentry-mode loopback --passphrase-file "$T/pass" \
+        --detach-sign --armor --output "$r/repodata/repomd.xml.asc" "$r/repodata/repomd.xml"
+done
 # signed_by_key FILE: FILE.sig is one detached signature over FILE (class 00,
 # a binary document) by PUBKEY's primary key. A plain gpg --verify would also
 # accept other signature forms; the status lines leave no doubt.

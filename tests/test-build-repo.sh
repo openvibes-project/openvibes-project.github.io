@@ -60,6 +60,7 @@ printf '%s' "$KEY" | gpg --batch --quiet --pinentry-mode loopback --passphrase p
 
 # A signed set: indexed, metadata signed and verifiable.
 site "$T/src1"; package one "$T/site1/$repo"; package two "$T/site1/$repo"
+package openvibes-agent "$T/site1/$repo"
 deb one "$T/site1/deb"; arch one "$T/site1/arch/x86_64"
 arch multi "$T/site1/arch/x86_64" signed 9; arch multi "$T/site1/arch/x86_64" signed 10
 bash "$ROOT/scripts/sign-rpms.sh" "$T/site1/$repo" "$T/key.pub"
@@ -68,6 +69,11 @@ test -s "$T/site1/$repo/repodata/repomd.xml.asc" || { echo "FAIL: no repomd.xml.
 gpg --batch --import "$T/key.pub" 2>/dev/null
 gpg --batch --verify "$T/site1/$repo/repodata/repomd.xml.asc" "$T/site1/$repo/repodata/repomd.xml" 2>/dev/null ||
     { echo "FAIL: repomd.xml signature does not verify"; exit 1; }
+# Fedora 45: the agent alone, indexed and signed the same way.
+f45=$T/site1/rpm/fedora/45/x86_64
+gpg --batch --verify "$f45/repodata/repomd.xml.asc" "$f45/repodata/repomd.xml" 2>/dev/null ||
+    { echo "FAIL: Fedora 45's repomd.xml signature does not verify"; exit 1; }
+[[ $(cd "$f45" && echo *.rpm) == openvibes-agent-1-1.noarch.rpm ]] || { echo "FAIL: Fedora 45 does not hold the agent alone"; exit 1; }
 for f in install.sh openvibes.gpg openvibes.repo index.html packages.html site.css assets/wordmark-dark.svg; do [[ -s $T/site1/$f ]] || { echo "FAIL: $f missing"; exit 1; }; done
 # apt: a flat repository whose Release hashes Packages and is clear-signed.
 gpg --batch --verify "$T/site1/deb/InRelease" 2>/dev/null || { echo "FAIL: InRelease does not verify"; exit 1; }

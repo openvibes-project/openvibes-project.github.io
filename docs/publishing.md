@@ -9,7 +9,7 @@ the signing key. The [README](../README.md) says what is published.
   installs the platform's administration tool and opens its Setup;
   `curl -fsSL …/install.sh | sudo sh -s -- --agent --platform HOST --token TOKEN --ca-sha256 FP`
   installs and enrolls an agent. The platform on Fedora 44; agents on
-  Fedora 44, AlmaLinux and Rocky 9+, Debian 12+, Ubuntu 22.04+ and Arch;
+  Fedora 44 and 45, AlmaLinux and Rocky 9+, Debian 12+, Ubuntu 22.04+ and Arch;
   x86_64.
 - `rpm/fedora/44/x86_64/`: every released RPM of
   [openvibes-platform](https://github.com/openvibes-project/openvibes-platform),
@@ -18,6 +18,8 @@ the signing key. The [README](../README.md) says what is published.
   with `repodata/repomd.xml.asc`. The assistant's model parts
   (`openvibes-llm-model-part*`) are not published: the model comes from its
   publisher.
+- `rpm/fedora/45/x86_64/`: the agent RPMs alone, the same files, for agents
+  on Fedora 45; signed the same way.
 - `deb/`: a flat apt repository of the agent's .deb packages (`InRelease`
   clear-signed, valid 30 days).
 - `arch/x86_64/`: a pacman repository of the agent's Arch packages
